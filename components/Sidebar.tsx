@@ -1,7 +1,8 @@
 
+
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Truck, Users, FileText, Receipt, BarChart2, Settings, X, Package, Calculator } from 'lucide-react';
+import { LayoutDashboard, Truck, Users, FileText, Receipt, BarChart2, Settings, X, Package, Calculator } from 'lucide-react'; // Added Calculator
 import { useAuth } from '../context/AuthContext';
 import { UserRole } from '../types';
 
@@ -21,7 +22,7 @@ const navItems: NavItemConfig[] = [
     { icon: LayoutDashboard, text: 'Dashboard', path: '/dashboard', allowedRoles: ['Admin', 'Sales', 'Operations', 'Finance'] },
     { icon: Users, text: 'Customers', path: '/customers', allowedRoles: ['Admin', 'Sales'] },
     { icon: FileText, text: 'Quotations', path: '/quotations', allowedRoles: ['Admin', 'Sales'] },
-    { icon: Calculator, text: 'Shipping Calculator', path: '/shipping-calculator', allowedRoles: ['Admin', 'Sales', 'Operations', 'Finance'] },
+    { icon: Calculator, text: 'Shipping Calculator', path: '/shipping-calculator', allowedRoles: ['Admin', 'Sales'] }, // New Nav Item
     { icon: Receipt, text: 'Invoices', path: '/invoices', allowedRoles: ['Admin', 'Sales', 'Finance'] },
     { icon: Truck, text: 'Shipments', path: '/shipments', allowedRoles: ['Admin', 'Sales', 'Operations'] },
     { icon: BarChart2, text: 'Reports', path: '/reports', allowedRoles: ['Admin', 'Finance'] },
@@ -73,6 +74,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                         </button>
                     </div>
                     
+                    {/* User Info Snippet in Sidebar */}
                     <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
                         <p className="text-sm font-semibold text-gray-800 dark:text-white">{user.name}</p>
                         <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">{user.role}</p>

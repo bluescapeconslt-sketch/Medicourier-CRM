@@ -1,21 +1,14 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { CRM_DOCUMENTATION } from '../constants';
 
-const API_KEY = process.env.API_KEY;
-
-if (!API_KEY) {
-  // This will be handled by the execution environment.
-  // console.error("API_KEY environment variable not set.");
-}
-
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+// The API key is obtained exclusively from the environment variable process.env.API_KEY.
+// When deploying to Netlify, add 'API_KEY' in the Site Settings > Environment variables.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const getAssistantResponse = async (userMessage: string, chatHistory: { role: 'user' | 'model', parts: { text: string }[] }[]) => {
     try {
-        const model = 'gemini-2.5-flash';
         const response = await ai.models.generateContent({
-            model: model,
+            model: 'gemini-3-flash-preview',
             contents: [
               ...chatHistory,
               { role: 'user', parts: [{ text: userMessage }] }
@@ -28,7 +21,7 @@ export const getAssistantResponse = async (userMessage: string, chatHistory: { r
         return response.text;
     } catch (error) {
         console.error("Error calling Gemini API:", error);
-        return "Sorry, I encountered an error. Please try again.";
+        return "Sorry, I encountered an error. Please ensure your API key is correctly configured in Netlify environment variables.";
     }
 };
 
@@ -40,11 +33,8 @@ export interface PaymentAnalysisResult {
 
 export const analyzePaymentProof = async (invoiceTotal: number, imagesBase64: string[]): Promise<PaymentAnalysisResult | null> => {
     try {
-        const model = 'gemini-2.5-flash';
-        
         // Prepare image parts. Strip the data URL prefix if present.
         const imageParts = imagesBase64.map(base64String => {
-            // Extract the base64 data and mime type
             const matches = base64String.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
             
             if (matches && matches.length === 3) {
@@ -65,14 +55,11 @@ export const analyzePaymentProof = async (invoiceTotal: number, imagesBase64: st
             The expected Invoice Total is ${invoiceTotal}.
             1. Identify the total amount paid shown in the screenshot.
             2. Calculate the difference: (Expected Invoice Total - Amount Paid).
-               - If Difference > 0, money is still owed.
-               - If Difference = 0, fully paid.
-               - If Difference < 0, they overpaid.
-            3. Provide a brief note explaining what you found (e.g., "Found payment of 5000 via UPI transaction 12345").
+            3. Provide a brief note explaining findings.
         `;
 
         const response = await ai.models.generateContent({
-            model: model,
+            model: 'gemini-3-flash-preview',
             contents: {
                 parts: [
                     ...imageParts as any,

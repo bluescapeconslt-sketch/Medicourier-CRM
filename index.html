@@ -5,6 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MediCourier CRM</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Polyfill for process.env to support Netlify environment variables in the browser -->
+    <script>
+      window.process = {
+        env: {
+          API_KEY: "" // Netlify will inject the real key if using a build plugin, or we rely on process.env.API_KEY at runtime
+        }
+      };
+    </script>
+
+    <!-- Add Babel Standalone for in-browser transpilation of TSX files -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Dancing+Script:wght@400;700&display=swap" rel="stylesheet">
@@ -35,6 +48,7 @@
 </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="./index.tsx"></script>
+    <!-- Updated script type for Babel processing -->
+    <script type="text/babel" data-type="module" src="./index.tsx"></script>
   </body>
 </html>
