@@ -27,12 +27,19 @@ const InvoicePrintPage: React.FC = () => {
             }
 
             if (!foundInvoice) {
-                foundInvoice = mockInvoices.find(i => i.id === id);
+                // Check local storage first, then mock
+                const storedInvoices = localStorage.getItem('crm_invoices');
+                const allInvoices: Invoice[] = storedInvoices ? JSON.parse(storedInvoices) : mockInvoices;
+                foundInvoice = allInvoices.find(i => i.id === id);
             }
 
             if (foundInvoice) {
                 setInvoice(foundInvoice);
-                const relatedQuotation = mockQuotations.find(q => q.id === foundInvoice!.quoteId);
+                // Fetch related quotation from local storage or mock
+                const storedQuotations = localStorage.getItem('crm_quotations');
+                const allQuotations: Quotation[] = storedQuotations ? JSON.parse(storedQuotations) : mockQuotations;
+                const relatedQuotation = allQuotations.find(q => q.id === foundInvoice!.quoteId);
+                
                 setQuotation(relatedQuotation);
             }
         }

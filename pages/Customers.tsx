@@ -5,25 +5,44 @@ import Badge from '../components/Badge';
 import { Search, PlusCircle } from 'lucide-react';
 import { Customer } from '../types';
 import AddCustomerModal from '../components/AddCustomerModal';
+import { useAuth } from '../context/AuthContext';
 
 const Customers: React.FC = () => {
+    const { user } = useAuth();
+    
     // Initialize from local storage or mock data
     const [customers, setCustomers] = useState<Customer[]>(() => {
         const stored = localStorage.getItem('crm_customers');
         return stored ? JSON.parse(stored) : mockCustomers;
     });
+    
+    // Filter customers based on user role (Sales view only their own)
+    const [visibleCustomers, setVisibleCustomers] = useState<Customer[]>([]);
+
+    useEffect(() => {
+        if (!user) return;
+        if (user.role === 'Sales') {
+            setVisibleCustomers(customers.filter(c => c.userId === user.id));
+        } else {
+            setVisibleCustomers(customers);
+        }
+    }, [customers, user]);
+
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
     const handleAddCustomer = (newCustomer: Customer) => {
-        const updatedCustomers = [newCustomer, ...customers];
+        // Attach current user ID to the new customer
+        const customerWithUser = { ...newCustomer, userId: user?.id };
+        
+        const updatedCustomers = [customerWithUser, ...customers];
         setCustomers(updatedCustomers);
         // Persist to local storage
         localStorage.setItem('crm_customers', JSON.stringify(updatedCustomers));
         setIsModalOpen(false);
     };
 
-    const filteredCustomers = customers.filter(c => 
+    const filteredCustomers = visibleCustomers.filter(c => 
         c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         c.email.toLowerCase().includes(searchTerm.toLowerCase())
     );
@@ -65,16 +84,22 @@ const Customers: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredCustomers.map(customer => (
-                                <tr key={customer.id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
-                                    <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{customer.name}</td>
-                                    <td className="px-6 py-4">{customer.email}</td>
-                                    <td className="px-6 py-4">{customer.phone}</td>
-                                    <td className="px-6 py-4">{customer.country}</td>
-                                    <td className="px-6 py-4 truncate max-w-[200px]" title={customer.address}>{customer.address}</td>
-                                    <td className="px-6 py-4">{customer.joinDate}</td>
+                            {filteredCustomers.length > 0 ? (
+                                filteredCustomers.map(customer => (
+                                    <tr key={customer.id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
+                                        <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{customer.name}</td>
+                                        <td className="px-6 py-4">{customer.email}</td>
+                                        <td className="px-6 py-4">{customer.phone}</td>
+                                        <td className="px-6 py-4">{customer.country}</td>
+                                        <td className="px-6 py-4 truncate max-w-[200px]" title={customer.address}>{customer.address}</td>
+                                        <td className="px-6 py-4">{customer.joinDate}</td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan={6} className="px-6 py-4 text-center text-gray-500">No customers found.</td>
                                 </tr>
-                            ))}
+                            )}
                         </tbody>
                     </table>
                 </div>

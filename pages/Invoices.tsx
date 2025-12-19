@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { mockInvoices, mockShipments, mockQuotations } from '../constants';
 import Badge from '../components/Badge';
@@ -9,6 +8,7 @@ import UpdatePaymentModal from '../components/UpdatePaymentModal';
 import ShipmentCreationModal from '../components/ShipmentCreationModal';
 import DocumentPreviewModal from '../components/DocumentPreviewModal';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const getStatusColor = (status: PaymentStatus) => {
     switch (status) {
@@ -21,7 +21,9 @@ const getStatusColor = (status: PaymentStatus) => {
 
 const Invoices: React.FC = () => {
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [invoices, setInvoices] = useState<Invoice[]>([]);
+    const [visibleInvoices, setVisibleInvoices] = useState<Invoice[]>([]);
     const [shipments, setShipments] = useState<Shipment[]>([]);
     const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -37,22 +39,18 @@ const Invoices: React.FC = () => {
     useEffect(() => {
         // Load Invoices
         const storedInvoices = localStorage.getItem('crm_invoices');
-        if (storedInvoices) {
-            let parsedInvoices = JSON.parse(storedInvoices);
-            
-            // Migration: Convert legacy 'paymentProof' (string) to 'paymentProofs' (array)
-            parsedInvoices = parsedInvoices.map((inv: any) => {
-                if (inv.paymentProof && (!inv.paymentProofs || inv.paymentProofs.length === 0)) {
-                    return { ...inv, paymentProofs: [inv.paymentProof], paymentProof: undefined };
-                }
-                return inv;
-            });
+        let parsedInvoices = storedInvoices ? JSON.parse(storedInvoices) : mockInvoices;
+        
+        // Migration logic
+        parsedInvoices = parsedInvoices.map((inv: any) => {
+            if (inv.paymentProof && (!inv.paymentProofs || inv.paymentProofs.length === 0)) {
+                return { ...inv, paymentProofs: [inv.paymentProof], paymentProof: undefined };
+            }
+            return inv;
+        });
 
-            setInvoices(parsedInvoices);
-        } else {
-            setInvoices(mockInvoices);
-            localStorage.setItem('crm_invoices', JSON.stringify(mockInvoices));
-        }
+        if (!storedInvoices) localStorage.setItem('crm_invoices', JSON.stringify(mockInvoices));
+        setInvoices(parsedInvoices);
 
         // Load Shipments (to check if an invoice is already shipped)
         const storedShipments = localStorage.getItem('crm_shipments');
@@ -63,6 +61,16 @@ const Invoices: React.FC = () => {
             localStorage.setItem('crm_shipments', JSON.stringify(mockShipments));
         }
     }, []);
+
+    // Filter Logic based on Role
+    useEffect(() => {
+        if (!user) return;
+        if (user.role === 'Sales') {
+            setVisibleInvoices(invoices.filter(i => i.userId === user.id));
+        } else {
+            setVisibleInvoices(invoices);
+        }
+    }, [invoices, user]);
 
     const handleOpenPrintModal = (invoice: Invoice) => {
         setSelectedInvoice(invoice);
@@ -84,14 +92,15 @@ const Invoices: React.FC = () => {
         setIsPreviewOpen(true);
     };
 
-    const handleUpdatePayment = (id: string, status: PaymentStatus, proofs: string[], amountPaid: number, balanceDue: number) => {
+    const handleUpdatePayment = (id: string, status: PaymentStatus, proofs: string[], amountPaid: number, balanceDue: number, paymentSource: string) => {
         const updatedInvoices = invoices.map(inv => 
             inv.id === id ? { 
                 ...inv, 
                 paymentStatus: status, 
                 paymentProofs: proofs,
                 amountPaid: amountPaid,
-                balanceDue: balanceDue
+                balanceDue: balanceDue,
+                paymentSource: paymentSource
             } : inv
         );
         
@@ -112,6 +121,7 @@ const Invoices: React.FC = () => {
         const newShipmentId = `SHP${(shipments.length + 1).toString().padStart(3, '0')}`;
         const newShipment: Shipment = {
             id: newShipmentId,
+            userId: invoice.userId, // Inherit ownership
             invoiceNumber: invoice.id,
             awb: 'PENDING-' + Math.floor(Math.random() * 1000000), 
             customer: invoice.customer,
@@ -134,7 +144,6 @@ const Invoices: React.FC = () => {
             // Close the modal immediately
             setIsShipmentModalOpen(false);
             
-            // Show confirmation message after a delay to allow modal to close visually.
             setTimeout(() => {
                 alert(`Shipment created successfully!\nAWB: ${newShipment.awb}\nCourier: ${courier}`);
                 navigate('/shipments');
@@ -142,25 +151,14 @@ const Invoices: React.FC = () => {
         } catch (error) {
             console.error("Storage error:", error);
             if (error instanceof DOMException && error.name === 'QuotaExceededError') {
-                 alert("Storage Limit Exceeded: Browser storage is full. The shipment was created but documents could not be saved. Please clear some old data.");
-                 // Fallback: Try saving without documents
-                 newShipment.documents = [];
-                 const fallbackShipments = [newShipment, ...shipments];
-                 try {
-                     localStorage.setItem('crm_shipments', JSON.stringify(fallbackShipments));
-                     setShipments(fallbackShipments);
-                     setIsShipmentModalOpen(false);
-                     navigate('/shipments');
-                 } catch (e) {
-                     alert("Critical Error: Cannot save shipment data.");
-                 }
+                 alert("Storage Limit Exceeded: Browser storage is full. The shipment was created but documents could not be saved.");
             } else {
                  alert("Error: An unexpected error occurred while saving.");
             }
         }
     };
 
-    const filteredInvoices = invoices.filter(inv => {
+    const filteredInvoices = visibleInvoices.filter(inv => {
         const matchesSearch = inv.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
                               inv.customer.name.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesStatus = statusFilter ? inv.paymentStatus === statusFilter : true;
@@ -216,78 +214,84 @@ const Invoices: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredInvoices.map(invoice => {
-                                const isShipped = shipments.some(s => s.invoiceNumber === invoice.id);
-                                const isPaid = invoice.paymentStatus === PaymentStatus.Paid;
-                                
-                                return (
-                                    <tr key={invoice.id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
-                                        <td className="px-6 py-4 font-medium text-blue-600 dark:text-blue-400">{invoice.id}</td>
-                                        <td className="px-6 py-4">{invoice.customer.name}</td>
-                                        <td className="px-6 py-4">{new Intl.NumberFormat('en-IN', { style: 'currency', currency: invoice.currency }).format(invoice.totalAmount)}</td>
-                                        <td className="px-6 py-4 font-medium text-gray-700 dark:text-gray-300">
-                                            {invoice.amountPaid !== undefined ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: invoice.currency }).format(invoice.amountPaid) : '-'}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <Badge color={getStatusColor(invoice.paymentStatus)}>{invoice.paymentStatus}</Badge>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {invoice.paymentProofs && invoice.paymentProofs.length > 0 ? (
-                                                <div className="flex flex-wrap gap-2">
-                                                    {invoice.paymentProofs.map((proof, idx) => (
-                                                        <div 
-                                                            key={idx} 
-                                                            onClick={() => handleViewProof(proof)}
-                                                            className="relative h-10 w-10 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all group bg-gray-100"
-                                                            title={`View Proof ${idx + 1}`}
-                                                        >
-                                                            <img 
-                                                                src={proof} 
-                                                                alt={`Proof ${idx + 1}`} 
-                                                                className="w-full h-full object-cover" 
-                                                            />
-                                                            <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                <Eye size={12} className="text-white drop-shadow-md" />
+                            {filteredInvoices.length > 0 ? (
+                                filteredInvoices.map(invoice => {
+                                    const isShipped = shipments.some(s => s.invoiceNumber === invoice.id);
+                                    const isPaid = invoice.paymentStatus === PaymentStatus.Paid;
+                                    
+                                    return (
+                                        <tr key={invoice.id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
+                                            <td className="px-6 py-4 font-medium text-blue-600 dark:text-blue-400">{invoice.id}</td>
+                                            <td className="px-6 py-4">{invoice.customer.name}</td>
+                                            <td className="px-6 py-4">{new Intl.NumberFormat('en-IN', { style: 'currency', currency: invoice.currency }).format(invoice.totalAmount)}</td>
+                                            <td className="px-6 py-4 font-medium text-gray-700 dark:text-gray-300">
+                                                {invoice.amountPaid !== undefined ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: invoice.currency }).format(invoice.amountPaid) : '-'}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <Badge color={getStatusColor(invoice.paymentStatus)}>{invoice.paymentStatus}</Badge>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {invoice.paymentProofs && invoice.paymentProofs.length > 0 ? (
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {invoice.paymentProofs.map((proof, idx) => (
+                                                            <div 
+                                                                key={idx} 
+                                                                onClick={() => handleViewProof(proof)}
+                                                                className="relative h-10 w-10 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all group bg-gray-100"
+                                                                title={`View Proof ${idx + 1}`}
+                                                            >
+                                                                <img 
+                                                                    src={proof} 
+                                                                    alt={`Proof ${idx + 1}`} 
+                                                                    className="w-full h-full object-cover" 
+                                                                />
+                                                                <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                    <Eye size={12} className="text-white drop-shadow-md" />
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            ) : (
-                                                <span className="text-xs text-gray-400">-</span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4">{invoice.dueDate}</td>
-                                        <td className="px-6 py-4 flex gap-2">
-                                            {isPaid && !isShipped && (
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-xs text-gray-400">-</span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4">{invoice.dueDate}</td>
+                                            <td className="px-6 py-4 flex gap-2">
+                                                {isPaid && !isShipped && (
+                                                    <button 
+                                                        onClick={() => handleOpenShipmentModal(invoice)}
+                                                        className="text-gray-500 hover:text-purple-600 transition-colors"
+                                                        aria-label="Ship Now"
+                                                        title="Ship Now"
+                                                    >
+                                                        <Truck size={18} />
+                                                    </button>
+                                                )}
                                                 <button 
-                                                    onClick={() => handleOpenShipmentModal(invoice)}
-                                                    className="text-gray-500 hover:text-purple-600 transition-colors"
-                                                    aria-label="Ship Now"
-                                                    title="Ship Now"
+                                                    onClick={() => handleOpenPaymentModal(invoice)} 
+                                                    className="text-gray-500 hover:text-green-600 transition-colors" 
+                                                    aria-label="Update Payment"
+                                                    title="Update Payment"
                                                 >
-                                                    <Truck size={18} />
+                                                    <CreditCard size={18} />
                                                 </button>
-                                            )}
-                                            <button 
-                                                onClick={() => handleOpenPaymentModal(invoice)} 
-                                                className="text-gray-500 hover:text-green-600 transition-colors" 
-                                                aria-label="Update Payment"
-                                                title="Update Payment"
-                                            >
-                                                <CreditCard size={18} />
-                                            </button>
-                                            <button 
-                                                onClick={() => handleOpenPrintModal(invoice)} 
-                                                className="text-gray-500 hover:text-blue-600 transition-colors" 
-                                                aria-label="Download PDF"
-                                                title="Print/PDF"
-                                            >
-                                                <FileDown size={18} />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
+                                                <button 
+                                                    onClick={() => handleOpenPrintModal(invoice)} 
+                                                    className="text-gray-500 hover:text-blue-600 transition-colors" 
+                                                    aria-label="Download PDF"
+                                                    title="Print/PDF"
+                                                >
+                                                    <FileDown size={18} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
+                            ) : (
+                                <tr>
+                                    <td colSpan={8} className="px-6 py-4 text-center text-gray-500">No invoices found.</td>
+                                </tr>
+                            )}
                         </tbody>
                     </table>
                 </div>

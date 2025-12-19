@@ -6,6 +6,8 @@ import { Search, ChevronDown, Paperclip, Plus, Link, ExternalLink, Filter } from
 import DocumentPreviewModal from '../components/DocumentPreviewModal';
 import AddShipmentDocumentModal from '../components/AddShipmentDocumentModal';
 import EditTrackingUrlModal from '../components/EditTrackingUrlModal';
+import ViewShipmentModal from '../components/ViewShipmentModal';
+import { useAuth } from '../context/AuthContext';
 
 const statusStyles = {
     green: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 border-green-200 dark:border-green-800',
@@ -35,7 +37,9 @@ const getStatusColorKey = (status: ShipmentStatus): keyof typeof statusStyles =>
 };
 
 const Shipments: React.FC = () => {
-    const [shipments, setShipments] = useState<Shipment[]>([]);
+    const { user } = useAuth();
+    const [allShipments, setAllShipments] = useState<Shipment[]>([]);
+    const [visibleShipments, setVisibleShipments] = useState<Shipment[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const [courierFilter, setCourierFilter] = useState('');
@@ -51,29 +55,43 @@ const Shipments: React.FC = () => {
     const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false);
     const [shipmentForTracking, setShipmentForTracking] = useState<Shipment | null>(null);
 
+    // View Shipment Details State
+    const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+    const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
+
     useEffect(() => {
         const storedShipments = localStorage.getItem('crm_shipments');
         if (storedShipments) {
-            setShipments(JSON.parse(storedShipments));
+            setAllShipments(JSON.parse(storedShipments));
         } else {
-            setShipments(mockShipments);
+            setAllShipments(mockShipments);
             localStorage.setItem('crm_shipments', JSON.stringify(mockShipments));
         }
     }, []);
 
+    // Filter based on role
+    useEffect(() => {
+        if (!user) return;
+        if (user.role === 'Sales') {
+            setVisibleShipments(allShipments.filter(s => s.userId === user.id));
+        } else {
+            setVisibleShipments(allShipments);
+        }
+    }, [allShipments, user]);
+
     const handleStatusChange = (id: string, newStatus: ShipmentStatus) => {
-        const updatedShipments = shipments.map(s => 
+        const updatedShipments = allShipments.map(s => 
             s.id === id ? { ...s, status: newStatus } : s
         );
-        setShipments(updatedShipments);
+        setAllShipments(updatedShipments);
         localStorage.setItem('crm_shipments', JSON.stringify(updatedShipments));
     };
 
     const handleCourierChange = (id: string, newCourier: string) => {
-        const updatedShipments = shipments.map(s => 
+        const updatedShipments = allShipments.map(s => 
             s.id === id ? { ...s, courier: newCourier as any } : s
         );
-        setShipments(updatedShipments);
+        setAllShipments(updatedShipments);
         localStorage.setItem('crm_shipments', JSON.stringify(updatedShipments));
     };
 
@@ -92,16 +110,21 @@ const Shipments: React.FC = () => {
         setIsTrackingModalOpen(true);
     };
 
+    const handleOpenViewModal = (shipment: Shipment) => {
+        setSelectedShipment(shipment);
+        setIsViewModalOpen(true);
+    };
+
     const handleUpdateTrackingUrl = (shipmentId: string, url: string) => {
-        const updatedShipments = shipments.map(s => 
+        const updatedShipments = allShipments.map(s => 
             s.id === shipmentId ? { ...s, trackingUrl: url } : s
         );
-        setShipments(updatedShipments);
+        setAllShipments(updatedShipments);
         localStorage.setItem('crm_shipments', JSON.stringify(updatedShipments));
     };
 
     const handleAddDocuments = (shipmentId: string, newDocuments: string[]) => {
-        const updatedShipments = shipments.map(s => {
+        const updatedShipments = allShipments.map(s => {
             if (s.id === shipmentId) {
                 const existingDocs = s.documents || [];
                 return { ...s, documents: [...existingDocs, ...newDocuments] };
@@ -111,18 +134,25 @@ const Shipments: React.FC = () => {
 
         try {
             localStorage.setItem('crm_shipments', JSON.stringify(updatedShipments));
-            setShipments(updatedShipments);
-        } catch (error) {
+            setAllShipments(updatedShipments);
+        } catch (error: any) {
             console.error("Local Storage Error:", error);
-            if (error instanceof DOMException && error.name === 'QuotaExceededError') {
-                 alert("Storage Limit Exceeded: Browser storage is full. Please delete some old shipments or use smaller files.");
+            
+            // Check specifically for quota exceeded errors
+            const isQuotaExceeded = 
+                error instanceof DOMException && 
+                (error.name === 'QuotaExceededError' || 
+                 error.name === 'NS_ERROR_DOM_QUOTA_REACHED');
+
+            if (isQuotaExceeded) {
+                 alert("Storage Limit Exceeded!\n\nYour browser's local storage is full. We could not save the new documents.\n\nTips:\n1. Delete old shipments or invoices.\n2. Try uploading smaller files (images are auto-compressed).\n3. Clear your browser data if you have backups.");
             } else {
-                 alert("An error occurred while saving documents.");
+                 alert(`An error occurred while saving documents: ${error.message || "Unknown error"}`);
             }
         }
     };
 
-    const filteredShipments = shipments.filter(s => {
+    const filteredShipments = visibleShipments.filter(s => {
         const matchesSearch = s.awb.toLowerCase().includes(searchTerm.toLowerCase()) ||
                               s.customer.name.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesStatus = statusFilter ? s.status === statusFilter : true;
@@ -227,7 +257,15 @@ const Shipments: React.FC = () => {
                                             </button>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4">{shipment.customer.name}</td>
+                                    <td className="px-6 py-4">
+                                        <button 
+                                            onClick={() => handleOpenViewModal(shipment)}
+                                            className="text-blue-600 dark:text-blue-400 hover:underline font-medium focus:outline-none"
+                                            title="View Shipment Details"
+                                        >
+                                            {shipment.customer.name}
+                                        </button>
+                                    </td>
                                     <td className="px-6 py-4">
                                         <div className="relative min-w-[120px]">
                                             <select
@@ -324,6 +362,11 @@ const Shipments: React.FC = () => {
                 onClose={() => setIsTrackingModalOpen(false)}
                 shipment={shipmentForTracking}
                 onUpdate={handleUpdateTrackingUrl}
+            />
+            <ViewShipmentModal
+                isOpen={isViewModalOpen}
+                onClose={() => setIsViewModalOpen(false)}
+                shipment={selectedShipment}
             />
         </div>
     );

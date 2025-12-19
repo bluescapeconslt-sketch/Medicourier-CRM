@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { Customer } from '../types';
@@ -16,6 +17,8 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose, on
         email: '',
         phone: '',
         address: '',
+        billingAddress: '',
+        shippingAddress: '',
         country: '',
     };
     const [formData, setFormData] = useState(initialFormState);
@@ -37,7 +40,7 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose, on
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
     };
@@ -46,9 +49,15 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose, on
         e.preventDefault();
         if (!validate()) return;
 
+        // Use general address if billing/shipping not provided
+        const finalBilling = formData.billingAddress.trim() || formData.address;
+        const finalShipping = formData.shippingAddress.trim() || formData.address;
+
         const newCustomer: Customer = {
             id: `CUST${(customerCount + 1).toString().padStart(3, '0')}`,
             ...formData,
+            billingAddress: finalBilling,
+            shippingAddress: finalShipping,
             joinDate: new Date().toISOString().split('T')[0],
         };
         onAddCustomer(newCustomer);
@@ -63,7 +72,7 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose, on
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center" onClick={onClose}>
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6 m-4" onClick={e => e.stopPropagation()}>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg p-6 m-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center pb-4 border-b dark:border-gray-700">
                     <h2 className="text-xl font-bold text-gray-900 dark:text-white">Add New Customer</h2>
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
@@ -72,30 +81,60 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose, on
                 </div>
                 <form onSubmit={handleSubmit} className="pt-4">
                     <div className="space-y-4">
-                        <div>
-                            <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Full Name</label>
-                            <input type="text" name="name" id="name" value={formData.name} onChange={handleChange} className={inputClass} />
-                            {errors.name && <p className={errorClass}>{errors.name}</p>}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Full Name</label>
+                                <input type="text" name="name" id="name" value={formData.name} onChange={handleChange} className={inputClass} />
+                                {errors.name && <p className={errorClass}>{errors.name}</p>}
+                            </div>
+                            <div>
+                                <label htmlFor="phone" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Phone</label>
+                                <input type="tel" name="phone" id="phone" value={formData.phone} onChange={handleChange} className={inputClass} />
+                                 {errors.phone && <p className={errorClass}>{errors.phone}</p>}
+                            </div>
                         </div>
                         <div>
                             <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
                             <input type="email" name="email" id="email" value={formData.email} onChange={handleChange} className={inputClass} />
                              {errors.email && <p className={errorClass}>{errors.email}</p>}
                         </div>
-                        <div>
-                            <label htmlFor="phone" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Phone</label>
-                            <input type="tel" name="phone" id="phone" value={formData.phone} onChange={handleChange} className={inputClass} />
-                             {errors.phone && <p className={errorClass}>{errors.phone}</p>}
+                        <div className="grid grid-cols-2 gap-4">
+                             <div>
+                                <label htmlFor="country" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Country</label>
+                                <input type="text" name="country" id="country" value={formData.country} onChange={handleChange} className={inputClass} />
+                                 {errors.country && <p className={errorClass}>{errors.country}</p>}
+                            </div>
                         </div>
                         <div>
-                            <label htmlFor="address" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Address</label>
-                            <input type="text" name="address" id="address" value={formData.address} onChange={handleChange} className={inputClass} />
+                            <label htmlFor="address" className="block text-sm font-medium text-gray-700 dark:text-gray-300">General Address</label>
+                            <textarea name="address" id="address" value={formData.address} onChange={handleChange} className={inputClass} rows={2}/>
                              {errors.address && <p className={errorClass}>{errors.address}</p>}
                         </div>
-                        <div>
-                            <label htmlFor="country" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Country</label>
-                            <input type="text" name="country" id="country" value={formData.country} onChange={handleChange} className={inputClass} />
-                             {errors.country && <p className={errorClass}>{errors.country}</p>}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label htmlFor="billingAddress" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Billing Address</label>
+                                <textarea 
+                                    name="billingAddress" 
+                                    id="billingAddress" 
+                                    value={formData.billingAddress} 
+                                    onChange={handleChange} 
+                                    className={inputClass} 
+                                    rows={3} 
+                                    placeholder="Same as general if empty"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="shippingAddress" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Shipping Address</label>
+                                <textarea 
+                                    name="shippingAddress" 
+                                    id="shippingAddress" 
+                                    value={formData.shippingAddress} 
+                                    onChange={handleChange} 
+                                    className={inputClass} 
+                                    rows={3}
+                                    placeholder="Same as general if empty"
+                                />
+                            </div>
                         </div>
                     </div>
                     <div className="mt-6 flex justify-end space-x-4">

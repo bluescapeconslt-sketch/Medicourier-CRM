@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { X, Upload, Check, CreditCard, Image as ImageIcon, Trash2, Sparkles, Loader } from 'lucide-react';
+import { X, Upload, Check, CreditCard, Image as ImageIcon, Trash2, Sparkles, Loader, Smartphone, Landmark, Globe, Wallet } from 'lucide-react';
 import { Invoice, PaymentStatus } from '../types';
 import { analyzePaymentProof, PaymentAnalysisResult } from '../services/geminiService';
 import { processFileForUpload } from '../utils/fileHelpers';
@@ -9,8 +8,23 @@ interface UpdatePaymentModalProps {
     isOpen: boolean;
     onClose: () => void;
     invoice: Invoice | null;
-    onUpdate: (id: string, status: PaymentStatus, proofs: string[], amountPaid: number, balanceDue: number) => void;
+    onUpdate: (id: string, status: PaymentStatus, proofs: string[], amountPaid: number, balanceDue: number, paymentSource: string) => void;
 }
+
+const paymentSources = [
+    { name: 'PhonePe', type: 'wallet', icon: Smartphone },
+    { name: 'Paytm', type: 'wallet', icon: Smartphone },
+    { name: 'Google Pay', type: 'wallet', icon: Smartphone },
+    { name: 'Axis Bank', type: 'bank', icon: Landmark },
+    { name: 'KVB Bank', type: 'bank', icon: Landmark },
+    { name: 'Yes Bank', type: 'bank', icon: Landmark },
+    { name: 'PayPal', type: 'gateway', icon: Wallet },
+    { name: 'Razorpay', type: 'gateway', icon: CreditCard },
+    { name: 'PayU Money', type: 'gateway', icon: CreditCard },
+    { name: 'Wise', type: 'international', icon: Globe },
+    { name: 'Remitly', type: 'international', icon: Globe },
+    { name: 'Revolut', type: 'international', icon: Globe },
+];
 
 const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({ isOpen, onClose, invoice, onUpdate }) => {
     const [status, setStatus] = useState<PaymentStatus>(PaymentStatus.Unpaid);
@@ -20,6 +34,7 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({ isOpen, onClose
     // Financials
     const [amountPaid, setAmountPaid] = useState<string>('');
     const [balanceDue, setBalanceDue] = useState<string>('');
+    const [paymentSource, setPaymentSource] = useState<string>('');
     
     // AI Analysis State
     const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -32,12 +47,14 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({ isOpen, onClose
             setProofs(invoice.paymentProofs || []);
             setAmountPaid(invoice.amountPaid?.toString() || '');
             setBalanceDue(invoice.balanceDue?.toString() || '');
+            setPaymentSource(invoice.paymentSource || '');
             setAnalysisResult(null);
         } else {
             setStatus(PaymentStatus.Unpaid);
             setProofs([]);
             setAmountPaid('');
             setBalanceDue('');
+            setPaymentSource('');
             setAnalysisResult(null);
         }
     }, [isOpen, invoice]);
@@ -145,7 +162,8 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({ isOpen, onClose
             status, 
             proofs, 
             parseFloat(amountPaid) || 0, 
-            parseFloat(balanceDue) || 0
+            parseFloat(balanceDue) || 0,
+            paymentSource
         );
         onClose();
     };
@@ -274,6 +292,31 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({ isOpen, onClose
                             </div>
                         </div>
 
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Source of Payment</label>
+                            <div className="relative">
+                                <select
+                                    value={paymentSource}
+                                    onChange={(e) => setPaymentSource(e.target.value)}
+                                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:ring-blue-500 focus:border-blue-500 sm:text-sm appearance-none"
+                                >
+                                    <option value="">Select Source</option>
+                                    {paymentSources.map((src) => (
+                                        <option key={src.name} value={src.name}>
+                                            {src.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-500">
+                                    {paymentSource ? (
+                                        React.createElement(paymentSources.find(s => s.name === paymentSource)?.icon || CreditCard, { size: 18 })
+                                    ) : (
+                                        <CreditCard size={18} />
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount Paid (₹)</label>
@@ -293,7 +336,7 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({ isOpen, onClose
                                     onChange={(e) => setBalanceDue(e.target.value)}
                                     className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-800 text-gray-500 cursor-not-allowed sm:text-sm"
                                     placeholder="0.00"
-                                    readOnly // Auto-calculated usually
+                                    readOnly 
                                 />
                             </div>
                         </div>

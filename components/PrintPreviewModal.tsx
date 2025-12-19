@@ -40,12 +40,16 @@ const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({ isOpen, onClose, 
         content = <QuotationPDFLayout quotation={data as Quotation} />;
     } else {
         const inv = data as Invoice;
-        const relatedQuotation = mockQuotations.find(q => q.id === inv.quoteId);
+        // Load quotations from local storage to ensure we find the one linked to this invoice
+        const storedQuotations = localStorage.getItem('crm_quotations');
+        const allQuotations: Quotation[] = storedQuotations ? JSON.parse(storedQuotations) : mockQuotations;
+        const relatedQuotation = allQuotations.find(q => q.id === inv.quoteId);
+        
         content = <InvoicePDFLayout invoice={inv} quotation={relatedQuotation} />;
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm p-4 overflow-hidden">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm p-4 overflow-hidden">
              <style>{`
                 @media print {
                     @page { margin: 0; size: auto; }

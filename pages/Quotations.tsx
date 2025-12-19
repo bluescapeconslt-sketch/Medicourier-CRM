@@ -8,6 +8,7 @@ import ViewQuotationModal from '../components/ViewQuotationModal';
 import PrintPreviewModal from '../components/PrintPreviewModal';
 import ConfirmConversionModal from '../components/ConfirmConversionModal';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const statusStyles = {
     green: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 border-green-200 dark:border-green-800',
@@ -30,8 +31,12 @@ const getStatusColorKey = (status: QuoteStatus): keyof typeof statusStyles => {
 
 const Quotations: React.FC = () => {
     const navigate = useNavigate();
-    const [quotations, setQuotations] = useState<Quotation[]>([]);
+    const { user } = useAuth();
+    const [allQuotations, setAllQuotations] = useState<Quotation[]>([]);
+    const [visibleQuotations, setVisibleQuotations] = useState<Quotation[]>([]);
     const [customers, setCustomers] = useState<Customer[]>([]);
+    const [visibleCustomers, setVisibleCustomers] = useState<Customer[]>([]);
+    
     const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -43,29 +48,37 @@ const Quotations: React.FC = () => {
 
     // Load data on mount
     useEffect(() => {
-        // Load Customers from local storage
+        // Load Customers
         const storedCustomers = localStorage.getItem('crm_customers');
-        if (storedCustomers) {
-            setCustomers(JSON.parse(storedCustomers));
-        } else {
-            setCustomers(mockCustomers);
-        }
+        const loadedCustomers = storedCustomers ? JSON.parse(storedCustomers) : mockCustomers;
+        setCustomers(loadedCustomers);
 
         // Load Quotations
         const storedQuotations = localStorage.getItem('crm_quotations');
-        if (storedQuotations) {
-            setQuotations(JSON.parse(storedQuotations));
-        } else {
-            setQuotations(mockQuotations);
-        }
+        const loadedQuotations = storedQuotations ? JSON.parse(storedQuotations) : mockQuotations;
+        setAllQuotations(loadedQuotations);
     }, []);
 
-    // Persist changes to local storage whenever quotations change
+    // Filter Data based on Role
     useEffect(() => {
-        if (quotations.length > 0) {
-            localStorage.setItem('crm_quotations', JSON.stringify(quotations));
+        if (!user) return;
+
+        if (user.role === 'Sales') {
+            setVisibleQuotations(allQuotations.filter(q => q.userId === user.id));
+            setVisibleCustomers(customers.filter(c => c.userId === user.id));
+        } else {
+            // Admin/Ops/Finance see all
+            setVisibleQuotations(allQuotations);
+            setVisibleCustomers(customers);
         }
-    }, [quotations]);
+    }, [allQuotations, customers, user]);
+
+    // Persist changes to local storage
+    useEffect(() => {
+        if (allQuotations.length > 0) {
+            localStorage.setItem('crm_quotations', JSON.stringify(allQuotations));
+        }
+    }, [allQuotations]);
 
     const handleOpenAddModal = () => {
         setSelectedQuotation(null);
@@ -93,28 +106,31 @@ const Quotations: React.FC = () => {
     };
 
     const handleSaveQuotation = (savedQuotation: Quotation) => {
-        const exists = quotations.some(q => q.id === savedQuotation.id);
+        // Attach current user ID if new
+        if (!savedQuotation.userId) {
+            savedQuotation.userId = user?.id;
+        }
+
+        const exists = allQuotations.some(q => q.id === savedQuotation.id);
         if (exists) {
-            setQuotations(quotations.map(q => q.id === savedQuotation.id ? savedQuotation : q));
+            setAllQuotations(allQuotations.map(q => q.id === savedQuotation.id ? savedQuotation : q));
         } else {
-            setQuotations(prev => [savedQuotation, ...prev]);
+            setAllQuotations(prev => [savedQuotation, ...prev]);
         }
         setIsAddEditModalOpen(false);
     };
 
     const handleStatusChange = (id: string, newStatus: QuoteStatus) => {
-        // If converting to invoice, open confirmation modal instead of updating immediately
         if (newStatus === QuoteStatus.Converted) {
-            const quotationToConvert = quotations.find(q => q.id === id);
+            const quotationToConvert = allQuotations.find(q => q.id === id);
             if (quotationToConvert) {
                 handleConvertClick(quotationToConvert);
             }
         } else {
-             // Normal status update
-             const updatedQuotations = quotations.map(q => 
+             const updatedQuotations = allQuotations.map(q => 
                 q.id === id ? { ...q, status: newStatus } : q
             );
-            setQuotations(updatedQuotations);
+            setAllQuotations(updatedQuotations);
         }
     };
 
@@ -126,11 +142,10 @@ const Quotations: React.FC = () => {
     const handleConfirmConvert = () => {
         if (!quoteToConvert) return;
 
-        // Update status
-        const updatedQuotations = quotations.map(q => 
+        const updatedQuotations = allQuotations.map(q => 
             q.id === quoteToConvert.id ? { ...q, status: QuoteStatus.Converted } : q
         );
-        setQuotations(updatedQuotations);
+        setAllQuotations(updatedQuotations);
         createInvoiceFromQuote(quoteToConvert);
         
         setIsConvertModalOpen(false);
@@ -138,13 +153,11 @@ const Quotations: React.FC = () => {
     };
 
     const createInvoiceFromQuote = (quote: Quotation) => {
-        // 1. Get existing invoices from storage to determine ID
         const storedInvoicesStr = localStorage.getItem('crm_invoices');
         const existingInvoices: Invoice[] = storedInvoicesStr 
             ? JSON.parse(storedInvoicesStr) 
             : mockInvoices;
 
-        // 2. Create new Invoice object
         const newInvoiceId = `INV${(existingInvoices.length + 1).toString().padStart(3, '0')}`;
         const today = new Date();
         const dueDate = new Date();
@@ -152,10 +165,11 @@ const Quotations: React.FC = () => {
 
         const newInvoice: Invoice = {
             id: newInvoiceId,
+            userId: quote.userId, // Inherit ownership from quote
             quoteId: quote.id,
             customer: quote.customer,
             totalAmount: quote.totalCost,
-            currency: 'INR', // Default, or fetch from settings
+            currency: 'INR', 
             paymentStatus: PaymentStatus.Unpaid,
             issueDate: today.toISOString().split('T')[0],
             dueDate: dueDate.toISOString().split('T')[0],
@@ -166,17 +180,16 @@ const Quotations: React.FC = () => {
             remoteAreaCharges: quote.remoteAreaCharges,
             deliveryCharges: quote.deliveryCharges,
             pickupCharges: quote.pickupCharges,
+            billingState: quote.billingState, 
         };
 
-        // 3. Save to local storage
         const updatedInvoices = [newInvoice, ...existingInvoices];
         localStorage.setItem('crm_invoices', JSON.stringify(updatedInvoices));
 
-        // 4. Navigate to invoices page
         navigate('/invoices');
     };
 
-    const filteredQuotations = quotations.filter(q => {
+    const filteredQuotations = visibleQuotations.filter(q => {
         const matchesSearch = q.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
                               q.customer.name.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesStatus = statusFilter ? q.status === statusFilter : true;
@@ -238,56 +251,62 @@ const Quotations: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredQuotations.map(quote => (
-                                <tr key={quote.id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
-                                    <td className="px-6 py-4 font-medium text-blue-600 dark:text-blue-400">{quote.id}</td>
-                                    <td className="px-6 py-4">{quote.customer.name}</td>
-                                    <td className="px-6 py-4">{quote.origin}</td>
-                                    <td className="px-6 py-4">{quote.destination}</td>
-                                    <td className="px-6 py-4">{quote.weight.toFixed(2)}</td>
-                                    <td className="px-6 py-4">₹{quote.totalCost.toFixed(2)}</td>
-                                    <td className="px-6 py-4">
-                                        <div className="relative">
-                                            <select
-                                                value={quote.status}
-                                                onChange={(e) => handleStatusChange(quote.id, e.target.value as QuoteStatus)}
-                                                className={`appearance-none block w-full pl-3 pr-8 py-1.5 text-xs font-semibold rounded-full border cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 ${statusStyles[getStatusColorKey(quote.status)]}`}
-                                            >
-                                                {Object.values(QuoteStatus).map((status) => (
-                                                    <option key={status} value={status} className="bg-white text-gray-900 dark:bg-gray-800 dark:text-white">
-                                                        {status}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-600 dark:text-gray-300">
-                                                <ChevronDown size={12} />
+                            {filteredQuotations.length > 0 ? (
+                                filteredQuotations.map(quote => (
+                                    <tr key={quote.id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
+                                        <td className="px-6 py-4 font-medium text-blue-600 dark:text-blue-400">{quote.id}</td>
+                                        <td className="px-6 py-4">{quote.customer.name}</td>
+                                        <td className="px-6 py-4">{quote.origin}</td>
+                                        <td className="px-6 py-4">{quote.destination}</td>
+                                        <td className="px-6 py-4">{quote.weight.toFixed(2)}</td>
+                                        <td className="px-6 py-4">₹{quote.totalCost.toFixed(2)}</td>
+                                        <td className="px-6 py-4">
+                                            <div className="relative">
+                                                <select
+                                                    value={quote.status}
+                                                    onChange={(e) => handleStatusChange(quote.id, e.target.value as QuoteStatus)}
+                                                    className={`appearance-none block w-full pl-3 pr-8 py-1.5 text-xs font-semibold rounded-full border cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 ${statusStyles[getStatusColorKey(quote.status)]}`}
+                                                >
+                                                    {Object.values(QuoteStatus).map((status) => (
+                                                        <option key={status} value={status} className="bg-white text-gray-900 dark:bg-gray-800 dark:text-white">
+                                                            {status}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-600 dark:text-gray-300">
+                                                    <ChevronDown size={12} />
+                                                </div>
                                             </div>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 flex items-center space-x-3">
-                                        <button onClick={() => handleOpenViewModal(quote)} className="text-gray-500 hover:text-blue-600" aria-label="View quotation" title="View">
-                                            <Eye size={18} />
-                                        </button>
-                                        <button onClick={() => handleOpenEditModal(quote)} className="text-gray-500 hover:text-green-600" aria-label="Edit quotation" title="Edit">
-                                            <Edit3 size={18} />
-                                        </button>
-                                        <button onClick={() => handleOpenPrintModal(quote)} className="text-gray-500 hover:text-red-600" aria-label="Download PDF" title="Print/PDF">
-                                            <FileDown size={18} />
-                                        </button>
-                                        {quote.status !== QuoteStatus.Converted && (
-                                            <button 
-                                                onClick={() => handleConvertClick(quote)} 
-                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-100 text-purple-700 rounded-md hover:bg-purple-200 transition-colors text-xs font-semibold ml-2" 
-                                                aria-label="Convert to Invoice"
-                                                title="Convert to Invoice"
-                                            >
-                                                <FileCheck size={14} />
-                                                Convert
+                                        </td>
+                                        <td className="px-6 py-4 flex items-center space-x-3">
+                                            <button onClick={() => handleOpenViewModal(quote)} className="text-gray-500 hover:text-blue-600" aria-label="View quotation" title="View">
+                                                <Eye size={18} />
                                             </button>
-                                        )}
-                                    </td>
+                                            <button onClick={() => handleOpenEditModal(quote)} className="text-gray-500 hover:text-green-600" aria-label="Edit quotation" title="Edit">
+                                                <Edit3 size={18} />
+                                            </button>
+                                            <button onClick={() => handleOpenPrintModal(quote)} className="text-gray-500 hover:text-red-600" aria-label="Download PDF" title="Print/PDF">
+                                                <FileDown size={18} />
+                                            </button>
+                                            {quote.status !== QuoteStatus.Converted && (
+                                                <button 
+                                                    onClick={() => handleConvertClick(quote)} 
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-100 text-purple-700 rounded-md hover:bg-purple-200 transition-colors text-xs font-semibold ml-2" 
+                                                    aria-label="Convert to Invoice"
+                                                    title="Convert to Invoice"
+                                                >
+                                                    <FileCheck size={14} />
+                                                    Convert
+                                                </button>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan={8} className="px-6 py-4 text-center text-gray-500">No quotations found.</td>
                                 </tr>
-                            ))}
+                            )}
                         </tbody>
                     </table>
                 </div>
@@ -296,8 +315,8 @@ const Quotations: React.FC = () => {
                 isOpen={isAddEditModalOpen}
                 onClose={() => setIsAddEditModalOpen(false)}
                 onSave={handleSaveQuotation}
-                customers={customers}
-                quotationCount={quotations.length}
+                customers={visibleCustomers} // Only pass customers visible to this user
+                quotationCount={allQuotations.length}
                 quotationToEdit={selectedQuotation}
             />
             <ViewQuotationModal 

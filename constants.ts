@@ -1,44 +1,81 @@
 
-
 import { Customer, Shipment, Quotation, Invoice, ReportData, ShipmentStatus, QuoteStatus, PaymentStatus, User, Notification } from './types';
 
 // Mock Customers
 export const mockCustomers: Customer[] = [
-    { id: 'CUST001', name: 'John Doe', email: 'john.doe@example.com', phone: '123-456-7890', address: '123 Main St, New York, USA', country: 'USA', joinDate: '2023-01-15' },
-    { id: 'CUST002', name: 'Priya Sharma', email: 'priya.sharma@example.com', phone: '987-654-3210', address: '456 MG Road, Mumbai, India', country: 'India', joinDate: '2023-02-20' },
-    { id: 'CUST003', name: 'Fatima Al Fassi', email: 'fatima.fassi@example.com', phone: '555-123-4567', address: '789 Sheikh Zayed Rd, Dubai, UAE', country: 'UAE', joinDate: '2023-03-10' },
-    { id: 'CUST004', name: 'Hans Müller', email: 'hans.muller@example.com', phone: '444-555-6666', address: '10 Kurfürstendamm, Berlin, Germany', country: 'Germany', joinDate: '2023-04-05' },
+    { 
+        id: 'CUST001', userId: 'USR001', // Owned by Admin
+        name: 'John Doe', 
+        email: 'john.doe@example.com', 
+        phone: '123-456-7890', 
+        address: '123 Main St, New York, USA', 
+        billingAddress: '123 Main St, New York, USA',
+        shippingAddress: '456 Warehouse Blvd, New Jersey, USA',
+        country: 'USA', 
+        joinDate: '2023-01-15' 
+    },
+    { 
+        id: 'CUST002', userId: 'USR002', // Owned by Sales (Sarah)
+        name: 'Priya Sharma', 
+        email: 'priya.sharma@example.com', 
+        phone: '987-654-3210', 
+        address: '456 MG Road, Mumbai, India', 
+        billingAddress: '456 MG Road, Mumbai, India',
+        shippingAddress: '456 MG Road, Mumbai, India',
+        country: 'India', 
+        joinDate: '2023-02-20' 
+    },
+    { 
+        id: 'CUST003', userId: 'USR002', // Owned by Sales (Sarah)
+        name: 'Fatima Al Fassi', 
+        email: 'fatima.fassi@example.com', 
+        phone: '555-123-4567', 
+        address: '789 Sheikh Zayed Rd, Dubai, UAE', 
+        billingAddress: '789 Sheikh Zayed Rd, Dubai, UAE',
+        shippingAddress: 'P.O. Box 12345, Dubai, UAE',
+        country: 'UAE', 
+        joinDate: '2023-03-10' 
+    },
+    { 
+        id: 'CUST004', userId: 'USR001', // Owned by Admin
+        name: 'Hans Müller', 
+        email: 'hans.muller@example.com', 
+        phone: '444-555-6666', 
+        address: '10 Kurfürstendamm, Berlin, Germany', 
+        billingAddress: '10 Kurfürstendamm, Berlin, Germany',
+        shippingAddress: 'Logistics Center 5, Hamburg, Germany',
+        country: 'Germany', 
+        joinDate: '2023-04-05' 
+    },
 ];
 
 // Mock Shipments
-// REMOVED SHP003, SHP004, SHP005 to ensure INVOICE 003 (Unpaid) and future invoices don't have pre-existing shipments blocking the UI.
 export const mockShipments: Shipment[] = [
-    { id: 'SHP001', invoiceNumber: 'INV001', awb: '1Z999AA10123456784', customer: mockCustomers[0], origin: 'USA', destination: 'India', courier: 'FedEx', status: ShipmentStatus.Delivered, lastUpdate: '2023-10-26', weight: 2.5, trackingUrl: 'https://www.fedex.com/fedextrack/?trknbr=1Z999AA10123456784' },
-    { id: 'SHP002', invoiceNumber: 'INV002', awb: '1Z999AA10123456785', customer: mockCustomers[1], origin: 'India', destination: 'UAE', courier: 'DHL', status: ShipmentStatus.InTransit, lastUpdate: '2023-10-28', weight: 1.8 },
+    { id: 'SHP001', userId: 'USR001', invoiceNumber: 'INV001', awb: '1Z999AA10123456784', customer: mockCustomers[0], origin: 'USA', destination: 'India', courier: 'FedEx', status: ShipmentStatus.Delivered, lastUpdate: '2023-10-26', weight: 2.5, trackingUrl: 'https://www.fedex.com/fedextrack/?trknbr=1Z999AA10123456784' },
+    { id: 'SHP002', userId: 'USR002', invoiceNumber: 'INV002', awb: '1Z999AA10123456785', customer: mockCustomers[1], origin: 'India', destination: 'UAE', courier: 'DHL', status: ShipmentStatus.InTransit, lastUpdate: '2023-10-28', weight: 1.8 },
 ];
 
 // Mock Quotations
-// Updated medicine weights to reflect "Line Weight" (Total weight for that item row), not unit weight.
 export const mockQuotations: Quotation[] = [
-    { id: 'QT001', customer: mockCustomers[0], medicines: [{ name: 'Metformin 500mg', quantity: 90, rate: 132.28, hsCode: '3004.90', gstRate: 12, weight: 0.9 }], weight: 0.9, origin: 'USA', destination: 'India', totalCost: 12500, status: QuoteStatus.Converted, createdDate: '2023-10-01', validity: '2023-10-15', purpose: 'Personal Use', deliveryCharges: 500, remoteAreaCharges: 0, pickupCharges: 100 },
-    { id: 'QT002', customer: mockCustomers[1], medicines: [{ name: 'Aspirin 81mg', quantity: 120, rate: 47.62, hsCode: '3004.50', gstRate: 5, weight: 0.6 }], weight: 0.6, origin: 'India', destination: 'UAE', totalCost: 6000, status: QuoteStatus.Accepted, createdDate: '2023-10-05', validity: '2023-10-20', purpose: 'Commercial Sample', deliveryCharges: 250, remoteAreaCharges: 0, pickupCharges: 0 },
-    { id: 'QT003', customer: mockCustomers[2], medicines: [{ name: 'Lipitor 20mg', quantity: 60, rate: 150, hsCode: '3004.90', gstRate: 18, weight: 1.2 }, { name: 'Ibuprofen 200mg', quantity: 100, rate: 80, hsCode: '3004.50', gstRate: 12, weight: 1.0 }], weight: 2.2, origin: 'UAE', destination: 'Germany', totalCost: 18250, status: QuoteStatus.Sent, createdDate: '2023-10-12', validity: '2023-10-27', purpose: 'Personal Medical Use', deliveryCharges: 1000, remoteAreaCharges: 500, pickupCharges: 200 },
-    { id: 'QT004', customer: mockCustomers[3], medicines: [{ name: 'Amoxicillin 250mg', quantity: 30, rate: 142.85, hsCode: '3004.10', gstRate: 5, weight: 0.45 }], weight: 0.45, origin: 'Germany', destination: 'USA', totalCost: 4500, status: QuoteStatus.Draft, createdDate: '2023-10-20', validity: '2023-11-04', purpose: 'Research', deliveryCharges: 200, remoteAreaCharges: 0, pickupCharges: 0 },
+    { id: 'QT001', userId: 'USR001', customer: mockCustomers[0], medicines: [{ name: 'Metformin 500mg', quantity: 90, rate: 132.28, hsCode: '3004.90', gstRate: 12, weight: 0.9 }], weight: 0.9, origin: 'USA', destination: 'India', billingState: 'Kerala', totalCost: 12500, status: QuoteStatus.Converted, createdDate: '2023-10-01', validity: '2023-10-15', purpose: 'Personal Use', deliveryCharges: 500, remoteAreaCharges: 0, pickupCharges: 100 },
+    { id: 'QT002', userId: 'USR002', customer: mockCustomers[1], medicines: [{ name: 'Aspirin 81mg', quantity: 120, rate: 47.62, hsCode: '3004.50', gstRate: 5, weight: 0.6 }], weight: 0.6, origin: 'India', destination: 'UAE', billingState: 'Maharashtra', totalCost: 6000, status: QuoteStatus.Accepted, createdDate: '2023-10-05', validity: '2023-10-20', purpose: 'Commercial Sample', deliveryCharges: 250, remoteAreaCharges: 0, pickupCharges: 0 },
+    { id: 'QT003', userId: 'USR002', customer: mockCustomers[2], medicines: [{ name: 'Lipitor 20mg', quantity: 60, rate: 150, hsCode: '3004.90', gstRate: 18, weight: 1.2 }, { name: 'Ibuprofen 200mg', quantity: 100, rate: 80, hsCode: '3004.50', gstRate: 12, weight: 1.0 }], weight: 2.2, origin: 'UAE', destination: 'Germany', billingState: 'Delhi', totalCost: 18250, status: QuoteStatus.Sent, createdDate: '2023-10-12', validity: '2023-10-27', purpose: 'Personal Medical Use', deliveryCharges: 1000, remoteAreaCharges: 500, pickupCharges: 200 },
+    { id: 'QT004', userId: 'USR001', customer: mockCustomers[3], medicines: [{ name: 'Amoxicillin 250mg', quantity: 30, rate: 142.85, hsCode: '3004.10', gstRate: 5, weight: 0.45 }], weight: 0.45, origin: 'Germany', destination: 'USA', billingState: 'Karnataka', totalCost: 4500, status: QuoteStatus.Draft, createdDate: '2023-10-20', validity: '2023-11-04', purpose: 'Research', deliveryCharges: 200, remoteAreaCharges: 0, pickupCharges: 0 },
 ];
 
 // Mock Invoices
 export const mockInvoices: Invoice[] = [
-    { id: 'INV001', quoteId: 'QT001', customer: mockCustomers[0], totalAmount: 12500, currency: 'INR', paymentStatus: PaymentStatus.Paid, issueDate: '2023-10-02', dueDate: '2023-10-17', purpose: 'Personal Use', deliveryCharges: 500, pickupCharges: 100 },
-    { id: 'INV002', quoteId: 'QT002', customer: mockCustomers[1], totalAmount: 6000, currency: 'INR', paymentStatus: PaymentStatus.Paid, issueDate: '2023-10-06', dueDate: '2023-10-21', purpose: 'Commercial Sample', deliveryCharges: 250 },
-    { id: 'INV003', quoteId: 'QT003', customer: mockCustomers[2], totalAmount: 18250, currency: 'INR', paymentStatus: PaymentStatus.Unpaid, issueDate: '2023-10-13', dueDate: '2023-10-28', purpose: 'Personal Medical Use', deliveryCharges: 1000, remoteAreaCharges: 500, pickupCharges: 200 },
+    { id: 'INV001', userId: 'USR001', quoteId: 'QT001', customer: mockCustomers[0], totalAmount: 12500, currency: 'INR', paymentStatus: PaymentStatus.Paid, issueDate: '2023-10-02', dueDate: '2023-10-17', purpose: 'Personal Use', deliveryCharges: 500, pickupCharges: 100, billingState: 'Kerala' },
+    { id: 'INV002', userId: 'USR002', quoteId: 'QT002', customer: mockCustomers[1], totalAmount: 6000, currency: 'INR', paymentStatus: PaymentStatus.Paid, issueDate: '2023-10-06', dueDate: '2023-10-21', purpose: 'Commercial Sample', deliveryCharges: 250, billingState: 'Maharashtra' },
+    { id: 'INV003', userId: 'USR002', quoteId: 'QT003', customer: mockCustomers[2], totalAmount: 18250, currency: 'INR', paymentStatus: PaymentStatus.Unpaid, issueDate: '2023-10-13', dueDate: '2023-10-28', purpose: 'Personal Medical Use', deliveryCharges: 1000, remoteAreaCharges: 500, pickupCharges: 200, billingState: 'Delhi' },
 ];
 
 // Mock Users
 export const mockUsers: User[] = [
-    { id: 'USR001', name: 'Admin User', email: 'admin@medicourier.com', role: 'Admin', status: 'Active', lastLogin: '2023-10-25 09:00 AM' },
-    { id: 'USR002', name: 'Sarah Sales', email: 'sarah@medicourier.com', role: 'Sales', status: 'Active', lastLogin: '2023-10-25 10:15 AM' },
-    { id: 'USR003', name: 'Mike Ops', email: 'mike@medicourier.com', role: 'Operations', status: 'Active', lastLogin: '2023-10-24 04:45 PM' },
-    { id: 'USR004', name: 'Fiona Finance', email: 'fiona@medicourier.com', role: 'Finance', status: 'Active', lastLogin: '2023-10-25 08:30 AM' },
+    { id: 'USR001', name: 'Admin User', email: 'admin@example.com', role: 'Admin', status: 'Active', lastLogin: '2023-10-25 09:00 AM', password: 'admin' },
+    { id: 'USR002', name: 'Sarah Sales', email: 'sales@example.com', role: 'Sales', status: 'Active', lastLogin: '2023-10-25 10:15 AM', password: 'sales' },
+    { id: 'USR003', name: 'Mike Ops', email: 'ops@example.com', role: 'Operations', status: 'Active', lastLogin: '2023-10-24 04:45 PM', password: 'ops' },
+    { id: 'USR004', name: 'Fiona Finance', email: 'finance@example.com', role: 'Finance', status: 'Active', lastLogin: '2023-10-25 08:30 AM', password: 'finance' },
 ];
 
 // Mock Notifications

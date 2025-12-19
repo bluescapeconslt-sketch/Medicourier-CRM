@@ -5,7 +5,7 @@ import type { LucideIcon } from 'lucide-react';
 interface CardProps {
     title: string;
     value: string;
-    icon: LucideIcon;
+    icon?: LucideIcon;
     change?: string;
     changeType?: 'increase' | 'decrease';
 }
@@ -24,9 +24,11 @@ const Card: React.FC<CardProps> = ({ title, value, icon: Icon, change, changeTyp
                     </p>
                 )}
             </div>
-            <div className="bg-blue-100 dark:bg-blue-900/50 rounded-full p-3">
-                <Icon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-            </div>
+            {Icon && (
+                <div className="bg-blue-100 dark:bg-blue-900/50 rounded-full p-3">
+                    <Icon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                </div>
+            )}
         </div>
     );
 };

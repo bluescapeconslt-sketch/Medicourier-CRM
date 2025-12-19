@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { X, FileDown } from 'lucide-react';
 import { Quotation } from '../types';
@@ -45,6 +44,9 @@ const ViewQuotationModal: React.FC<ViewQuotationModalProps> = ({ isOpen, onClose
     const deliveryCharges = quotation.deliveryCharges || 0;
     const pickupCharges = quotation.pickupCharges || 0;
 
+    // Check if Intra-State (Kerala)
+    const isIntraState = quotation.billingState?.trim().toLowerCase() === 'kerala';
+
     // Calculate totals based on item rates
     let grossSubtotal = 0;
     let totalItemTax = 0;
@@ -52,14 +54,25 @@ const ViewQuotationModal: React.FC<ViewQuotationModalProps> = ({ isOpen, onClose
     quotation.medicines.forEach(med => {
         const lineTotal = med.quantity * med.rate;
         grossSubtotal += lineTotal;
-        const medGst = med.gstRate || 12; // default to 12 if missing
+        const medGst = med.gstRate !== undefined ? med.gstRate : 12; // default to 12 if missing
         totalItemTax += lineTotal * (medGst / 100);
     });
 
     const discountAmount = grossSubtotal * decimalDiscountRate;
-    // Charges attract 18% GST (excluding Pickup Charges)
-    const chargesTax = (deliveryCharges + remoteCharges) * 0.18;
+    
+    // Delivery is Exclusive of 18% GST -> add tax
+    const deliveryBase = deliveryCharges;
+    const deliveryTax = deliveryCharges * 0.18;
+
+    // Remote is Exclusive -> add tax
+    const remoteTax = remoteCharges * 0.18;
+
+    const chargesTax = deliveryTax + remoteTax;
     const totalTax = totalItemTax + chargesTax;
+    
+    // Split for display
+    const totalCGST = totalTax / 2;
+    const totalSGST = totalTax / 2;
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center" onClick={onClose}>
@@ -81,6 +94,7 @@ const ViewQuotationModal: React.FC<ViewQuotationModalProps> = ({ isOpen, onClose
                                 <p><strong>Email:</strong> {quotation.customer.email}</p>
                                 <p><strong>Phone:</strong> {quotation.customer.phone}</p>
                                 <p><strong>Address:</strong> {quotation.customer.address}</p>
+                                {quotation.billingState && <p><strong>State:</strong> {quotation.billingState}</p>}
                             </div>
                         </div>
 
@@ -105,7 +119,7 @@ const ViewQuotationModal: React.FC<ViewQuotationModalProps> = ({ isOpen, onClose
                                     <tr>
                                         <th className="p-2">Name</th>
                                         <th className="p-2">HS Code</th>
-                                        <th className="p-2 text-center">Weight (kg)</th>
+                                        <th className="p-2 text-center">Total Weight (kg)</th>
                                         <th className="p-2 text-center">Qty</th>
                                         <th className="p-2 text-right">Rate</th>
                                         <th className="p-2 text-center">GST%</th>
@@ -120,7 +134,7 @@ const ViewQuotationModal: React.FC<ViewQuotationModalProps> = ({ isOpen, onClose
                                             <td className="p-2 text-center">{(med.weight || 0).toFixed(2)}</td>
                                             <td className="p-2 text-center">{med.quantity}</td>
                                             <td className="p-2 text-right">₹{med.rate.toFixed(2)}</td>
-                                            <td className="p-2 text-center">{med.gstRate || 12}%</td>
+                                            <td className="p-2 text-center">{med.gstRate !== undefined ? med.gstRate : 12}%</td>
                                             <td className="p-2 text-right">₹{(med.quantity * med.rate).toFixed(2)}</td>
                                         </tr>
                                     ))}
@@ -138,7 +152,7 @@ const ViewQuotationModal: React.FC<ViewQuotationModalProps> = ({ isOpen, onClose
                                 <div className="flex justify-between text-green-600 dark:text-green-400"><span>Discount ({discountRate}%):</span> <span>-₹{discountAmount.toFixed(2)}</span></div>
                             )}
                             {deliveryCharges > 0 && (
-                                <div className="flex justify-between"><span>Delivery Charges:</span> <span>₹{deliveryCharges.toFixed(2)}</span></div>
+                                <div className="flex justify-between"><span>Delivery Charges:</span> <span>₹{deliveryBase.toFixed(2)}</span></div>
                             )}
                             {pickupCharges > 0 && (
                                 <div className="flex justify-between"><span>Pick Up Charges:</span> <span>₹{pickupCharges.toFixed(2)}</span></div>
@@ -146,7 +160,16 @@ const ViewQuotationModal: React.FC<ViewQuotationModalProps> = ({ isOpen, onClose
                             {remoteCharges > 0 && (
                                 <div className="flex justify-between"><span>Remote Area Charges:</span> <span>₹{remoteCharges.toFixed(2)}</span></div>
                             )}
-                            <div className="flex justify-between"><span>Total GST (Items + Charges):</span> <span>₹{totalTax.toFixed(2)}</span></div>
+                            
+                            {isIntraState ? (
+                                <>
+                                    <div className="flex justify-between text-blue-600 dark:text-blue-400"><span>Output CGST:</span> <span>₹{totalCGST.toFixed(2)}</span></div>
+                                    <div className="flex justify-between text-blue-600 dark:text-blue-400"><span>Output SGST:</span> <span>₹{totalSGST.toFixed(2)}</span></div>
+                                </>
+                            ) : (
+                                <div className="flex justify-between text-blue-600 dark:text-blue-400"><span>Output IGST:</span> <span>₹{totalTax.toFixed(2)}</span></div>
+                            )}
+                            
                             <hr className="my-1 border-gray-300 dark:border-gray-600"/>
                             <div className="flex justify-between font-bold text-lg text-gray-900 dark:text-white"><span>Total Cost:</span> <span>₹{quotation.totalCost.toFixed(2)}</span></div>
                         </div>

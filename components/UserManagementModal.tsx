@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { X, Plus, Edit2, Trash2, Check, Shield } from 'lucide-react';
 import { User, UserRole } from '../types';
@@ -18,7 +19,8 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
         name: '',
         email: '',
         role: 'Sales',
-        status: 'Active'
+        status: 'Active',
+        password: ''
     });
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
@@ -30,7 +32,8 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
             name: '',
             email: '',
             role: 'Sales',
-            status: 'Active'
+            status: 'Active',
+            password: ''
         });
         setErrors({});
         setView('form');
@@ -42,7 +45,8 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
             name: user.name,
             email: user.email,
             role: user.role,
-            status: user.status
+            status: user.status,
+            password: user.password // Load existing password (in real app, this wouldn't happen)
         });
         setErrors({});
         setView('form');
@@ -52,6 +56,8 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
         if (window.confirm("Are you sure you want to delete this user?")) {
             const updatedUsers = users.filter(u => u.id !== userId);
             onUpdateUsers(updatedUsers);
+            // Also update localStorage immediately for consistency
+            localStorage.setItem('crm_users', JSON.stringify(updatedUsers));
         }
     };
 
@@ -60,6 +66,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
         if (!formData.name?.trim()) newErrors.name = "Name is required";
         if (!formData.email?.trim()) newErrors.email = "Email is required";
         else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = "Invalid email format";
+        if (!formData.password?.trim()) newErrors.password = "Password is required";
         
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -69,16 +76,15 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
         e.preventDefault();
         if (!validate()) return;
 
-        const timestamp = new Date().toLocaleString();
+        let updatedList: User[];
 
         if (editingUser) {
             // Update existing
-            const updatedList = users.map(u => 
+            updatedList = users.map(u => 
                 u.id === editingUser.id 
                 ? { ...u, ...formData } as User 
                 : u
             );
-            onUpdateUsers(updatedList);
         } else {
             // Create new
             const newUser: User = {
@@ -86,8 +92,11 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
                 ...formData as User,
                 lastLogin: 'Never'
             };
-            onUpdateUsers([...users, newUser]);
+            updatedList = [...users, newUser];
         }
+        
+        onUpdateUsers(updatedList);
+        localStorage.setItem('crm_users', JSON.stringify(updatedList));
         setView('list');
     };
 
@@ -217,6 +226,18 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
                                             placeholder="john@medicourier.com"
                                         />
                                         {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
+                                        <input 
+                                            type="text" 
+                                            value={formData.password}
+                                            onChange={(e) => setFormData({...formData, password: e.target.value})}
+                                            className={inputClass}
+                                            placeholder="Set login password"
+                                        />
+                                        {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
                                     </div>
 
                                     <div>

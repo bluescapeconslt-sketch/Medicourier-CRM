@@ -1,10 +1,12 @@
 
+
 import React, { useState } from 'react';
-import { Menu, UserCircle, Bell } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { Menu, UserCircle, Bell, LogOut } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import NotificationsDropdown from './NotificationsDropdown';
 import { mockNotifications } from '../constants';
 import { Notification } from '../types';
+import { useAuth } from '../context/AuthContext';
 
 interface HeaderProps {
     sidebarOpen: boolean;
@@ -13,6 +15,8 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen }) => {
     const location = useLocation();
+    const navigate = useNavigate();
+    const { logout, user } = useAuth();
     const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
     const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
@@ -32,6 +36,11 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen }) => {
 
     const handleMarkAllAsRead = () => {
         setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    };
+
+    const handleLogout = () => {
+        logout();
+        navigate('/login');
     };
 
     return (
@@ -67,10 +76,20 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen }) => {
                     />
                 </div>
                 
-                <div className="relative">
-                    <button className="flex items-center text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                <div className="flex items-center gap-3 border-l border-gray-200 dark:border-gray-700 pl-4">
+                    <div className="flex items-center">
                         <UserCircle size={28} className="text-gray-600 dark:text-gray-300" />
-                        <span className="hidden ml-2 text-sm font-medium md:block dark:text-gray-200">Admin</span>
+                        <div className="hidden md:flex flex-col ml-2">
+                            <span className="text-sm font-medium dark:text-gray-200">{user?.name}</span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">{user?.role}</span>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={handleLogout}
+                        className="text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 transition-colors"
+                        title="Logout"
+                    >
+                        <LogOut size={20} />
                     </button>
                 </div>
             </div>

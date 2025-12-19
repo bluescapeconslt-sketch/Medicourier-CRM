@@ -1,5 +1,4 @@
 
-
 import React from 'react';
 import { Quotation } from '../types';
 import { Package } from 'lucide-react';
@@ -12,13 +11,14 @@ const QuotationPDFLayout: React.FC<QuotationPDFLayoutProps> = ({ quotation }) =>
     // Read config from quotation object, fallback to local storage
     const taxName = quotation.taxName || localStorage.getItem('crm_tax_name') || 'GST';
     
-    // Note: quotation.taxRate is largely ignored now in favor of per-item and charge-specific tax
-    
     const discountRate = quotation.discount || 0;
     const decimalDiscountRate = discountRate / 100;
     const remoteCharges = quotation.remoteAreaCharges || 0;
     const deliveryCharges = quotation.deliveryCharges || 0;
     const pickupCharges = quotation.pickupCharges || 0;
+
+    // Check if Intra-State (Kerala)
+    const isIntraState = quotation.billingState?.trim().toLowerCase() === 'kerala';
 
     // Calculate totals based on item rates and individual tax
     let grossSubtotal = 0;
@@ -27,47 +27,63 @@ const QuotationPDFLayout: React.FC<QuotationPDFLayoutProps> = ({ quotation }) =>
     quotation.medicines.forEach(med => {
         const lineTotal = med.quantity * med.rate;
         grossSubtotal += lineTotal;
-        const medGst = med.gstRate || 12; // default to 12 if missing in old data
+        const medGst = med.gstRate !== undefined ? med.gstRate : 12; // default to 12 if missing in old data
         totalItemTax += lineTotal * (medGst / 100);
     });
     
     const discountAmount = grossSubtotal * decimalDiscountRate;
     
-    // Charges attract 18% GST (excluding Pickup Charges)
-    const chargesTax = (deliveryCharges + remoteCharges) * 0.18;
+    // Delivery is Exclusive of 18% GST -> add tax
+    const deliveryBase = deliveryCharges;
+    const deliveryTax = deliveryCharges * 0.18;
+
+    // Remote is Exclusive -> add tax
+    const remoteTax = remoteCharges * 0.18;
+
+    const chargesTax = deliveryTax + remoteTax;
     const totalTax = totalItemTax + chargesTax;
     
-    const taxableAmount = (grossSubtotal - discountAmount) + deliveryCharges + remoteCharges + pickupCharges;
+    // Split Tax for display
+    const totalCGST = totalTax / 2;
+    const totalSGST = totalTax / 2;
     
     // Load Company Settings
     const companyName = localStorage.getItem('crm_company_name') || 'MEDICOURIER Solutions Inc.';
     const companyAddress = localStorage.getItem('crm_company_address') || '123 Global Way, New York';
     const logoUrl = localStorage.getItem('crm_logo');
+    const signatureUrl = localStorage.getItem('crm_signature');
     const termsText = localStorage.getItem('crm_quote_terms') || 
         `Payment is due within 15 days of invoice date.\nOverdue interest @ 14% will be charged on delayed payments.\nPlease quote the quotation number in all correspondence.`;
     
     const termsList = termsText.split('\n').filter(line => line.trim() !== '');
+
+    const billingAddress = quotation.customer.billingAddress || quotation.customer.address;
+    const shippingAddress = quotation.customer.shippingAddress || quotation.customer.address;
 
     return (
         // Main Container
         <div className="bg-white text-gray-800 font-sans flex flex-col box-border w-[210mm] min-h-[297mm]">
             
             {/* Modern Split Header */}
-            <header className="flex w-full mb-8 pdf-item-row">
-                {/* Left Side: Logo Only */}
-                <div className="w-[60%] pt-10 pl-12 pr-6 flex flex-col justify-center items-start">
+            <header className="flex w-full mb-8 pdf-item-row overflow-hidden">
+                {/* Left Side: Logo & Company Info */}
+                <div className="w-[60%] pt-10 pl-12 pr-4 flex flex-col justify-start items-start">
                      {logoUrl ? (
-                        <img src={logoUrl} alt="Logo" className="h-24 w-auto object-contain" />
+                        <img src={logoUrl} alt="Logo" className="h-16 w-auto object-contain mb-4" />
                     ) : (
-                        <div className="bg-[#005b9e] text-white p-3 rounded-lg">
-                            <Package size={40} strokeWidth={1.5} />
+                        <div className="bg-[#005b9e] text-white p-3 rounded-lg mb-4">
+                            <Package size={32} strokeWidth={1.5} />
                         </div>
                     )}
+                    <h2 className="font-bold text-gray-900 text-lg uppercase mb-1 break-words w-full">{companyName}</h2>
+                    <p className="text-gray-500 text-xs leading-snug whitespace-pre-line max-w-sm break-words">
+                        {companyAddress}
+                    </p>
                 </div>
 
                 {/* Right Side: Document Details Banner */}
-                <div className="w-[40%] bg-[#005b9e] text-white pt-10 pr-12 pl-10 pb-8 flex flex-col justify-center items-end rounded-bl-[60px]">
-                    <h1 className="text-4xl font-extrabold tracking-widest uppercase mb-4">Quotation</h1>
+                <div className="w-[40%] bg-[#005b9e] text-white pt-10 pr-8 pl-8 pb-8 flex flex-col justify-center items-end rounded-bl-[60px] overflow-hidden">
+                    <h1 className="text-4xl font-extrabold tracking-wide uppercase mb-4 text-right break-words w-full">Quotation</h1>
                     <div className="space-y-2 text-right">
                         <div>
                             <span className="block text-blue-200 text-xs font-semibold uppercase tracking-wider">Quotation #</span>
@@ -92,23 +108,27 @@ const QuotationPDFLayout: React.FC<QuotationPDFLayoutProps> = ({ quotation }) =>
             {/* Content Wrapper */}
             <div className="px-12 flex-grow flex flex-col">
                 
-                {/* Address Blocks Grid - Perfectly Aligned Side-by-Side */}
+                {/* BILL TO / SHIP TO Grid */}
                 <section className="grid grid-cols-2 gap-12 mb-10 items-start pdf-item-row">
-                    {/* From */}
+                    {/* Bill To */}
                     <div>
-                        <h3 className="text-xs font-bold text-[#005b9e] uppercase tracking-wider mb-2 border-b border-[#005b9e]/20 pb-1">Quotation By</h3>
+                        <h3 className="text-xs font-bold text-[#005b9e] uppercase tracking-wider mb-2 border-b-2 border-[#005b9e]/20 pb-1">Bill To</h3>
                         <div className="text-sm space-y-1">
-                            <p className="font-bold text-gray-900 text-lg">{companyName}</p>
-                            <p className="text-gray-600 leading-snug whitespace-pre-line break-words">{companyAddress}</p>
+                            <p className="font-bold text-gray-900 text-lg">{quotation.customer.name}</p>
+                            <p className="text-gray-600 leading-snug whitespace-pre-line break-words">{billingAddress}</p>
+                            <p className="text-gray-600 mt-1"><span className="font-medium text-gray-800">Email:</span> {quotation.customer.email}</p>
+                            {quotation.billingState && (
+                                <p className="text-gray-600 mt-1"><span className="font-medium text-gray-800">State:</span> {quotation.billingState}</p>
+                            )}
                         </div>
                     </div>
 
-                    {/* To */}
+                    {/* Ship To */}
                     <div>
-                        <h3 className="text-xs font-bold text-[#005b9e] uppercase tracking-wider mb-2 border-b border-[#005b9e]/20 pb-1">Quotation To</h3>
+                        <h3 className="text-xs font-bold text-[#005b9e] uppercase tracking-wider mb-2 border-b-2 border-[#005b9e]/20 pb-1">Ship To</h3>
                         <div className="text-sm space-y-1">
                             <p className="font-bold text-gray-900 text-lg">{quotation.customer.name}</p>
-                            <p className="text-gray-600 leading-snug whitespace-pre-line break-words">{quotation.customer.address}</p>
+                            <p className="text-gray-600 leading-snug whitespace-pre-line break-words">{shippingAddress}</p>
                             <p className="text-gray-600 mt-1"><span className="font-medium text-gray-800">Email:</span> {quotation.customer.email}</p>
                         </div>
                     </div>
@@ -130,29 +150,31 @@ const QuotationPDFLayout: React.FC<QuotationPDFLayoutProps> = ({ quotation }) =>
                 <section className="mb-10">
                     <table className="w-full text-sm border-collapse table-fixed">
                         <thead>
-                            <tr className="text-[#005b9e] border-b-2 border-[#005b9e]">
-                                <th className="py-3 px-2 text-center font-bold uppercase tracking-wider w-[5%]">#</th>
-                                <th className="py-3 px-2 text-left font-bold uppercase tracking-wider w-[45%]">Item Description</th>
-                                <th className="py-3 px-2 text-center font-bold uppercase tracking-wider w-[10%]">Quantity</th>
+                            <tr className="text-[#005b9e] border-b-2 border-[#005b9e] pdf-item-row">
+                                <th className="py-3 px-1 text-center font-bold uppercase tracking-wider w-[5%]">#</th>
+                                <th className="py-3 px-2 text-left font-bold uppercase tracking-wider w-[40%]">Item Description</th>
+                                <th className="py-3 px-1 text-center font-bold uppercase tracking-wider w-[10%]">Qty</th>
                                 <th className="py-3 px-2 text-right font-bold uppercase tracking-wider w-[15%]">Rate</th>
-                                <th className="py-3 px-2 text-center font-bold uppercase tracking-wider w-[10%]">GST%</th>
-                                <th className="py-3 px-2 text-right font-bold uppercase tracking-wider w-[15%]">Amount</th>
+                                <th className="py-3 px-1 text-center font-bold uppercase tracking-wider w-[10%]">GST %</th>
+                                <th className="py-3 px-2 text-right font-bold uppercase tracking-wider w-[20%]">Amount</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {quotation.medicines.map((med, index) => {
                                 const itemTotal = med.quantity * med.rate;
                                 const isEven = index % 2 === 0;
+                                const gstRate = med.gstRate !== undefined ? med.gstRate : 12; // default to 12 if missing
+
                                 return (
                                     <tr key={index} className={`pdf-item-row ${isEven ? "bg-white" : "bg-gray-50"}`}>
-                                        <td className="py-4 px-2 text-center align-top text-gray-500 font-medium">{index + 1}</td>
+                                        <td className="py-4 px-1 text-center align-top text-gray-500 font-medium">{index + 1}</td>
                                         <td className="py-4 px-2 align-top">
                                             <div className="font-bold text-gray-900 text-base break-words whitespace-normal">{med.name}</div>
                                             <div className="text-gray-500 text-xs mt-1">HS Code: <span className="font-mono bg-gray-100 px-1 rounded">{med.hsCode}</span></div>
                                         </td>
-                                        <td className="py-4 px-2 text-center align-top text-gray-700 font-medium">{med.quantity}</td>
+                                        <td className="py-4 px-1 text-center align-top text-gray-700 font-medium">{med.quantity}</td>
                                         <td className="py-4 px-2 text-right align-top text-gray-700">₹{med.rate.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                                        <td className="py-4 px-2 text-center align-top text-gray-700">{med.gstRate || 12}%</td>
+                                        <td className="py-4 px-1 text-center align-top text-gray-500">{gstRate}%</td>
                                         <td className="py-4 px-2 text-right align-top font-bold text-gray-900">₹{itemTotal.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                                     </tr>
                                 );
@@ -195,7 +217,8 @@ const QuotationPDFLayout: React.FC<QuotationPDFLayoutProps> = ({ quotation }) =>
                              {deliveryCharges > 0 && (
                                 <div className="flex justify-between text-sm bg-purple-50 p-2 rounded border-l-4 border-purple-200">
                                     <span className="text-purple-900 font-medium">Delivery Charges</span>
-                                    <span className="font-bold text-purple-900">₹{deliveryCharges.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                                    {/* Display Base Amount for Delivery */}
+                                    <span className="font-bold text-purple-900">₹{deliveryBase.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                                 </div>
                             )}
 
@@ -213,10 +236,23 @@ const QuotationPDFLayout: React.FC<QuotationPDFLayoutProps> = ({ quotation }) =>
                                 </div>
                             )}
 
-                            <div className="flex justify-between text-sm px-2">
-                                <span className="text-gray-600 font-medium">Total GST</span>
-                                <span className="font-bold text-gray-900">₹{totalTax.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-                            </div>
+                            {isIntraState ? (
+                                <>
+                                    <div className="flex justify-between text-sm px-2">
+                                        <span className="text-gray-600 font-medium">Output CGST</span>
+                                        <span className="font-bold text-gray-900">₹{totalCGST.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm px-2">
+                                        <span className="text-gray-600 font-medium">Output SGST</span>
+                                        <span className="font-bold text-gray-900">₹{totalSGST.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="flex justify-between text-sm px-2">
+                                    <span className="text-gray-600 font-medium">Output IGST</span>
+                                    <span className="font-bold text-gray-900">₹{totalTax.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                                </div>
+                            )}
                         </div>
 
                         <div className="flex justify-between items-center py-4 px-2">
@@ -226,9 +262,13 @@ const QuotationPDFLayout: React.FC<QuotationPDFLayoutProps> = ({ quotation }) =>
                         
                         <div className="flex justify-end mt-10">
                              <div className="text-center w-48">
-                                 {/* Signature Placeholder */}
+                                 {/* Signature */}
                                 <div className="h-12 border-b-2 border-gray-300 mb-2 flex items-end justify-center">
-                                    <span className="font-dancing-script text-3xl text-[#005b9e]">Authorized</span>
+                                    {signatureUrl ? (
+                                        <img src={signatureUrl} alt="Signature" className="h-12 object-contain" />
+                                    ) : (
+                                        <span className="font-dancing-script text-3xl text-[#005b9e]">Authorized</span>
+                                    )}
                                 </div>
                                 <div className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">Authorized Signature</div>
                             </div>

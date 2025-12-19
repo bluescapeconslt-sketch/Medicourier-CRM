@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { X, Upload, FileText, Trash2, Plus, Image as ImageIcon, Loader } from 'lucide-react';
+import { X, Upload, FileText, Trash2, Plus, Image as ImageIcon, Loader, CheckCircle, AlertCircle } from 'lucide-react';
 import { Shipment } from '../types';
 import { processFileForUpload } from '../utils/fileHelpers';
 
@@ -11,10 +11,17 @@ interface AddShipmentDocumentModalProps {
     onAdd: (shipmentId: string, newDocuments: string[]) => void;
 }
 
+interface FileUploadItem {
+    id: string;
+    name: string;
+    status: 'processing' | 'success' | 'error';
+    base64?: string;
+    error?: string;
+}
+
 const AddShipmentDocumentModal: React.FC<AddShipmentDocumentModalProps> = ({ isOpen, onClose, shipment, onAdd }) => {
-    const [documents, setDocuments] = useState<string[]>([]);
+    const [fileQueue, setFileQueue] = useState<FileUploadItem[]>([]);
     const [dragActive, setDragActive] = useState(false);
-    const [isProcessing, setIsProcessing] = useState(false);
 
     if (!isOpen || !shipment) return null;
 
@@ -26,21 +33,37 @@ const AddShipmentDocumentModal: React.FC<AddShipmentDocumentModalProps> = ({ isO
         e.target.value = '';
     };
 
-    const processFiles = async (fileList: FileList) => {
-        setIsProcessing(true);
+    const processFiles = (fileList: FileList) => {
         const files = Array.from(fileList);
         
-        try {
-            const processedDocs = await Promise.all(
-                files.map(file => processFileForUpload(file))
-            );
-            setDocuments(prev => [...prev, ...processedDocs]);
-        } catch (error) {
-            console.error("Error processing files:", error);
-            alert(error instanceof Error ? error.message : "Failed to process files.");
-        } finally {
-            setIsProcessing(false);
-        }
+        // Create entries for new files
+        const newItems: FileUploadItem[] = files.map(file => ({
+            id: Math.random().toString(36).substring(2) + Date.now().toString(),
+            name: file.name,
+            status: 'processing'
+        }));
+
+        setFileQueue(prev => [...prev, ...newItems]);
+
+        // Process each file individually
+        files.forEach(async (file, index) => {
+            const item = newItems[index];
+            try {
+                const base64 = await processFileForUpload(file);
+                setFileQueue(prev => prev.map(i => 
+                    i.id === item.id ? { ...i, status: 'success', base64 } : i
+                ));
+            } catch (error) {
+                console.error("Error processing file:", file.name, error);
+                setFileQueue(prev => prev.map(i => 
+                    i.id === item.id ? { 
+                        ...i, 
+                        status: 'error', 
+                        error: error instanceof Error ? error.message : "Failed to process" 
+                    } : i
+                ));
+            }
+        });
     };
 
     const handleDrag = (e: React.DragEvent) => {
@@ -62,17 +85,24 @@ const AddShipmentDocumentModal: React.FC<AddShipmentDocumentModalProps> = ({ isO
         }
     };
 
-    const handleRemoveDocument = (index: number) => {
-        setDocuments(prev => prev.filter((_, i) => i !== index));
+    const handleRemoveItem = (id: string) => {
+        setFileQueue(prev => prev.filter(i => i.id !== id));
     };
 
     const handleSubmit = () => {
-        if (documents.length > 0) {
-            onAdd(shipment.id, documents);
-            setDocuments([]);
+        const successfulDocs = fileQueue
+            .filter(i => i.status === 'success' && i.base64)
+            .map(i => i.base64!);
+
+        if (successfulDocs.length > 0) {
+            onAdd(shipment.id, successfulDocs);
+            setFileQueue([]);
             onClose();
         }
     };
+
+    const isProcessing = fileQueue.some(i => i.status === 'processing');
+    const hasSuccessfulDocs = fileQueue.some(i => i.status === 'success');
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center" onClick={onClose}>
@@ -121,26 +151,44 @@ const AddShipmentDocumentModal: React.FC<AddShipmentDocumentModalProps> = ({ isO
                         </div>
                     </div>
 
-                    {/* Document List */}
-                    {documents.length > 0 && (
-                        <div className="mt-4 space-y-2 max-h-40 overflow-y-auto">
-                            {documents.map((doc, index) => {
-                                const isPdf = doc.match(/^data:application\/pdf/);
+                    {/* File List with Status */}
+                    {fileQueue.length > 0 && (
+                        <div className="mt-4 space-y-2 max-h-48 overflow-y-auto pr-1">
+                            {fileQueue.map((item) => {
+                                const isPdf = item.name.toLowerCase().endsWith('.pdf');
                                 return (
-                                    <div key={index} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600">
-                                        <div className="flex items-center gap-3 overflow-hidden">
+                                    <div key={item.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600">
+                                        <div className="flex items-center gap-3 overflow-hidden flex-1">
                                             {isPdf ? (
                                                 <FileText size={16} className="text-red-500 flex-shrink-0" />
                                             ) : (
                                                 <ImageIcon size={16} className="text-blue-500 flex-shrink-0" />
                                             )}
-                                            <span className="text-xs text-gray-700 dark:text-gray-300 truncate">
-                                                New Document {index + 1}
+                                            <span className="text-xs text-gray-700 dark:text-gray-300 truncate font-medium max-w-[150px]">
+                                                {item.name}
                                             </span>
+                                            
+                                            {/* Status Indicators */}
+                                            {item.status === 'processing' && (
+                                                <span className="flex items-center gap-1 text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                                                    <Loader size={10} className="animate-spin" /> Processing
+                                                </span>
+                                            )}
+                                            {item.status === 'success' && (
+                                                <span className="flex items-center gap-1 text-[10px] text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
+                                                    <CheckCircle size={10} /> Ready
+                                                </span>
+                                            )}
+                                            {item.status === 'error' && (
+                                                <span className="flex items-center gap-1 text-[10px] text-red-600 bg-red-50 px-2 py-0.5 rounded-full" title={item.error}>
+                                                    <AlertCircle size={10} /> Failed
+                                                </span>
+                                            )}
                                         </div>
                                         <button 
-                                            onClick={() => handleRemoveDocument(index)}
-                                            className="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-50 dark:hover:bg-red-900/30"
+                                            onClick={() => handleRemoveItem(item.id)}
+                                            className="text-gray-400 hover:text-red-500 p-1 rounded-full transition-colors"
+                                            disabled={item.status === 'processing'}
                                         >
                                             <Trash2 size={14} />
                                         </button>
@@ -160,11 +208,11 @@ const AddShipmentDocumentModal: React.FC<AddShipmentDocumentModalProps> = ({ isO
                     </button>
                     <button 
                         onClick={handleSubmit}
-                        disabled={documents.length === 0 || isProcessing}
+                        disabled={!hasSuccessfulDocs || isProcessing}
                         className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        {isProcessing ? <Loader className="animate-spin" size={16} /> : <Plus size={16} />}
-                        {isProcessing ? 'Processing...' : 'Add Documents'}
+                        <Plus size={16} />
+                        Add {fileQueue.filter(i => i.status === 'success').length > 0 ? fileQueue.filter(i => i.status === 'success').length : ''} Documents
                     </button>
                 </div>
             </div>

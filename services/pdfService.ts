@@ -1,3 +1,4 @@
+
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 
@@ -57,41 +58,54 @@ export const generatePDF = async (elementId: string, fileName: string) => {
 
     container.appendChild(clonedElement);
 
-    // --- SMART PAGE BREAK LOGIC ---
-    // Detect elements that cross the page boundary and push them down
-    const rows = clonedElement.querySelectorAll('.pdf-item-row');
+    // --- SMART PAGE BREAK LOGIC (REFACTORED) ---
+    // We must track the accumulated shift because pushing one row down moves all subsequent rows.
+    const rows = Array.from(clonedElement.querySelectorAll('.pdf-item-row')) as HTMLElement[];
     const containerRect = clonedElement.getBoundingClientRect();
     
-    // We iterate and check against page boundaries (1123px, 2246px, etc.)
+    let totalYShift = 0;
+
     for (let i = 0; i < rows.length; i++) {
-        const row = rows[i] as HTMLElement;
+        const row = rows[i];
+        // Get the element's natural position relative to the top of the document
         const rect = row.getBoundingClientRect();
+        const originalTop = rect.top - containerRect.top;
         
-        // Calculate relative position from top of the document
-        const elTop = rect.top - containerRect.top;
-        const elBottom = elTop + rect.height;
+        // Calculate where this element sits *currently*, accounting for previous shifts
+        const currentTop = originalTop + totalYShift;
+        const currentBottom = currentTop + rect.height;
         
         // Determine which page this element starts on (0-indexed)
-        const startPage = Math.floor(elTop / A4_HEIGHT_PX);
-        const endPage = Math.floor(elBottom / A4_HEIGHT_PX);
+        const startPage = Math.floor(currentTop / A4_HEIGHT_PX);
+        const endPage = Math.floor(currentBottom / A4_HEIGHT_PX);
         
-        // If element crosses a page boundary
+        // If the element crosses a page boundary
         if (startPage !== endPage) {
-            // Calculate how much space we need to push it to the next page
-            // The boundary is (startPage + 1) * A4_HEIGHT_PX
-            const pageBoundary = (startPage + 1) * A4_HEIGHT_PX;
-            const pushAmount = pageBoundary - elTop + 20; // +20px safety margin
+            // We need to push it to the start of the next page.
+            // The next page starts at:
+            const nextPageStart = (startPage + 1) * A4_HEIGHT_PX;
             
-            // Add padding-top to the first cell of the row (if table row) 
-            // or margin-top if block element
-            const firstCell = row.querySelector('td, th') as HTMLElement;
-            if (firstCell) {
-                const currentPadding = parseFloat(window.getComputedStyle(firstCell).paddingTop) || 0;
-                firstCell.style.paddingTop = `${currentPadding + pushAmount}px`;
+            // The padding needed is the distance from current top to the next page start
+            // Plus a small buffer (20px) to ensure headers/borders don't touch the edge
+            const pushAmount = (nextPageStart - currentTop) + 20; // Added 20px buffer
+            
+            // Apply the push
+            if (row.tagName === 'TR') {
+                // For table rows, apply padding to cells to keep background colors intact if any
+                const cells = row.querySelectorAll('td, th');
+                cells.forEach((cell) => {
+                    const htmlCell = cell as HTMLElement;
+                    const existingPad = parseFloat(window.getComputedStyle(htmlCell).paddingTop) || 0;
+                    htmlCell.style.paddingTop = `${existingPad + pushAmount}px`;
+                });
             } else {
-                const currentMargin = parseFloat(window.getComputedStyle(row).marginTop) || 0;
-                row.style.marginTop = `${currentMargin + pushAmount}px`;
+                // For block elements
+                const existingMargin = parseFloat(window.getComputedStyle(row).marginTop) || 0;
+                row.style.marginTop = `${existingMargin + pushAmount}px`;
             }
+
+            // Add this push to the accumulator so future rows know they are further down
+            totalYShift += pushAmount;
         }
     }
     // ------------------------------
@@ -114,6 +128,9 @@ export const generatePDF = async (elementId: string, fileName: string) => {
                    const htmlEl = el[i] as HTMLElement;
                    if (htmlEl.style) {
                        htmlEl.style.overflow = 'visible'; 
+                       // Ensure print-specific styles are honored
+                       // Fix: Use standard 'printColorAdjust' property for controlling background graphics in print.
+                       htmlEl.style.printColorAdjust = 'exact';
                    }
                 }
             }
@@ -146,8 +163,9 @@ export const generatePDF = async (elementId: string, fileName: string) => {
         heightLeft -= pdfPageHeight;
 
         // Loop to add subsequent pages
-        // Tolerance threshold (1mm) prevents blank pages due to sub-pixel rounding
-        while (heightLeft >= 1) {
+        // FIX: Increased tolerance to 5mm to prevent blank pages at the end 
+        // caused by tiny overflow or anti-aliasing artifacts.
+        while (heightLeft > 5) {
             position = heightLeft - imgHeight;
             pdf.addPage();
             pdf.addImage(imgData, 'PNG', 0, position, pdfPageWidth, imgHeight);

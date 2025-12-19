@@ -1,5 +1,4 @@
 
-
 export enum ShipmentStatus {
     PendingPickup = "Pending Pickup",
     PickedUp = "Picked Up",
@@ -35,20 +34,25 @@ export interface MedicineItem {
     hsCode: string;
     gstRate: number; // 5, 12, or 18
     weight: number; // Total line weight in kg
+    unitWeight?: number; // Weight per unit in kg
 }
 
 export interface Customer {
     id: string;
+    userId?: string; // Owner ID
     name: string;
     email: string;
     phone: string;
     address: string;
+    billingAddress?: string;
+    shippingAddress?: string;
     country: string;
     joinDate: string;
 }
 
 export interface Shipment {
     id: string;
+    userId?: string; // Owner ID
     invoiceNumber: string;
     awb: string;
     customer: Customer;
@@ -64,17 +68,19 @@ export interface Shipment {
 
 export interface Quotation {
     id: string;
+    userId?: string; // Owner ID
     customer: Customer;
     medicines: MedicineItem[];
     weight: number; // in kg
     origin: string;
     destination: string;
+    billingState?: string; 
     totalCost: number;
     status: QuoteStatus;
     createdDate: string;
     validity: string;
     taxName?: string;
-    taxRate?: number; // Kept for backward compatibility or global overrides if needed
+    taxRate?: number; 
     discount?: number; // in percentage
     purpose?: string;
     remoteAreaCharges?: number;
@@ -84,6 +90,7 @@ export interface Quotation {
 
 export interface Invoice {
     id: string;
+    userId?: string; // Owner ID
     quoteId: string;
     customer: Customer;
     totalAmount: number;
@@ -98,9 +105,11 @@ export interface Invoice {
     remoteAreaCharges?: number;
     deliveryCharges?: number;
     pickupCharges?: number;
+    billingState?: string; 
     paymentProofs?: string[]; // Array of Base64 strings of the uploaded images
     amountPaid?: number; // The actual amount paid by customer
     balanceDue?: number; // The difference remaining
+    paymentSource?: string; // New field for Payment Source (Bank, Wallet, etc.)
 }
 
 export interface ReportData {
@@ -117,6 +126,7 @@ export interface User {
     role: UserRole;
     status: 'Active' | 'Inactive';
     lastLogin: string;
+    password?: string; 
 }
 
 export interface Notification {
@@ -127,4 +137,23 @@ export interface Notification {
     timestamp: string;
     isRead: boolean;
     link?: string;
+}
+
+// Interface for the imported CSV data report
+export interface LegacyShipment {
+    refNumber: string;
+    date: string;
+    gstInvoice: string;
+    receiverName: string;
+    country: string;
+    shippingPartner: string;
+    weight: string;
+    waybillNumber: string;
+    status: string;
+    vendor: string;
+    paymentMode: string;
+    shippingCharge: number;
+    productCost: number;
+    receivedAmt: number;
+    profit: number;
 }

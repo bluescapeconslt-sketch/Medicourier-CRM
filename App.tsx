@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { HashRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Dashboard from './pages/Dashboard';
@@ -10,8 +10,14 @@ import Quotations from './pages/Quotations';
 import Invoices from './pages/Invoices';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
+import Login from './pages/Login';
 import SmartAssistant from './components/SmartAssistant';
+import ProtectedRoute from './components/ProtectedRoute';
+import { AuthProvider } from './context/AuthContext';
 import { MessageCircle } from 'lucide-react';
+import QuotationPrintPage from './pages/QuotationPrintPage';
+import InvoicePrintPage from './pages/InvoicePrintPage';
+import ShippingCalculator from './pages/ShippingCalculator';
 
 const App: React.FC = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -40,20 +46,48 @@ const App: React.FC = () => {
     );
 
     return (
-        <HashRouter>
-            <Routes>
-                <Route element={<MainLayout />}>
-                    <Route path="/" element={<Navigate to="/dashboard" />} />
-                    <Route path="/dashboard" element={<Dashboard />} />
-                    <Route path="/shipments" element={<Shipments />} />
-                    <Route path="/customers" element={<Customers />} />
-                    <Route path="/quotations" element={<Quotations />} />
-                    <Route path="/invoices" element={<Invoices />} />
-                    <Route path="/reports" element={<Reports />} />
-                    <Route path="/settings" element={<Settings />} />
-                </Route>
-            </Routes>
-        </HashRouter>
+        <AuthProvider>
+            <BrowserRouter>
+                <Routes>
+                    <Route path="/login" element={<Login />} />
+                    <Route path="/quotation/print/:id" element={<QuotationPrintPage />} />
+                    <Route path="/invoice/print/:id" element={<InvoicePrintPage />} />
+                    
+                    <Route element={<MainLayout />}>
+                        
+                        <Route element={<ProtectedRoute allowedRoles={['Admin', 'Sales', 'Operations', 'Finance']} />}>
+                            <Route path="/" element={<Navigate to="/dashboard" />} />
+                            <Route path="/dashboard" element={<Dashboard />} />
+                            <Route path="/shipping-calculator" element={<ShippingCalculator />} />
+                        </Route>
+
+                        <Route element={<ProtectedRoute allowedRoles={['Admin', 'Operations', 'Sales']} />}>
+                            <Route path="/shipments" element={<Shipments />} />
+                        </Route>
+
+                        <Route element={<ProtectedRoute allowedRoles={['Admin', 'Sales']} />}>
+                            <Route path="/customers" element={<Customers />} />
+                            <Route path="/quotations" element={<Quotations />} />
+                        </Route>
+
+                        <Route element={<ProtectedRoute allowedRoles={['Admin', 'Finance', 'Sales']} />}>
+                            <Route path="/invoices" element={<Invoices />} />
+                        </Route>
+
+                        <Route element={<ProtectedRoute allowedRoles={['Admin', 'Finance']} />}>
+                            <Route path="/reports" element={<Reports />} />
+                        </Route>
+
+                        <Route element={<ProtectedRoute allowedRoles={['Admin']} />}>
+                            <Route path="/settings" element={<Settings />} />
+                        </Route>
+
+                    </Route>
+                    
+                    <Route path="*" element={<Navigate to="/login" />} />
+                </Routes>
+            </BrowserRouter>
+        </AuthProvider>
     );
 };
 
